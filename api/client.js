@@ -1,7 +1,6 @@
-import { Platform } from 'react-native';
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || 'https://wheatless-jermaine-aftmost.ngrok-free.dev';
 
-const LOCAL_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || LOCAL_HOST;
 
 // Fallback user ID for development/offline testing if no JWT access token is active
 export const DEFAULT_DEV_USER_ID = 'dfece1b2-0200-4d68-8485-36f28c52d3f6';

@@ -1,9 +1,10 @@
 // FamilyCareEats API client. See API_docs.md for the full contract.
 // Every call throws ApiError on failure; callers fall back to local data.
 
-const DEFAULT_BASE_URL = 'http://localhost:8000';
+const DEFAULT_BASE_URL = 'https://wheatless-jermaine-aftmost.ngrok-free.dev';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_BASE_URL;
+
 
 
 const REQUEST_TIMEOUT_MS = 15000;
