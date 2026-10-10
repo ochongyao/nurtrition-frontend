@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { DEMO_MEALS, pickLocalAnalysis } from '../data/mockFamily';
 import { PLANT_COLOR_HEX, UPF_TIER_LABELS } from '../api/adapters';
 import IngredientEditor from './IngredientEditor';
@@ -53,8 +54,26 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
     setLoading(false);
   };
 
-  const processImageUri = async (uri) => {
-    setImage(uri);
+  const processImageUri = async (uri, base64 = null) => {
+    let finalUri = uri;
+    let finalBase64 = base64;
+
+    // Always convert taken/chosen plate image to JPEG before uploading
+    try {
+      const manip = await manipulateAsync(
+        uri,
+        [],
+        { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+      );
+      if (manip?.uri) {
+        finalUri = manip.uri;
+        finalBase64 = manip.base64 || finalBase64;
+      }
+    } catch (e) {
+      console.warn('JPEG conversion warning in ScanView:', e?.message || e);
+    }
+
+    setImage(finalUri);
     setTransmitted(false);
     setAnalysis(null);
     setUploadedMeal(null);
@@ -62,7 +81,7 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
 
     if (onUpload) {
       try {
-        const meal = await onUpload(uri, prepContext);
+        const meal = await onUpload(finalUri, prepContext, { base64: finalBase64 });
         setUploadedMeal(meal);
         setAnalysis({
           source: 'api',
@@ -116,11 +135,12 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.5,
+      quality: 0.8,
+      base64: true,
     });
 
-    if (res.canceled) return;
-    processImageUri(res.assets[0].uri);
+    if (res.canceled || !res.assets || !res.assets[0]) return;
+    processImageUri(res.assets[0].uri, res.assets[0].base64);
   };
 
   const pickImage = async () => {
@@ -128,11 +148,12 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.5,
+      quality: 0.8,
+      base64: true,
     });
 
-    if (res.canceled) return;
-    processImageUri(res.assets[0].uri);
+    if (res.canceled || !res.assets || !res.assets[0]) return;
+    processImageUri(res.assets[0].uri, res.assets[0].base64);
   };
 
   const loadDemo = (key) => {

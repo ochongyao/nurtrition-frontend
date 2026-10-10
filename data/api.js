@@ -1,5 +1,5 @@
-// FamilyCareEats API client. See API_docs.md for the full contract.
-// Every call throws ApiError on failure; callers fall back to local data.
+import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 const DEFAULT_BASE_URL = 'https://wheatless-jermaine-aftmost.ngrok-free.dev';
 
@@ -101,19 +101,94 @@ export const getMe = () => request('/api/v1/users/me');
 
 export const uploadMeal = async ({
   uri,
+  base64,
   fileName = 'meal_photo.jpg',
-  mimeType = 'image/jpeg',
   preparationContext = 'home_cooked',
   familyId,
 }) => {
-  const form = new FormData();
+  let uploadUri = uri;
+  let uploadBase64 = base64;
+
+  // 1. Always convert to JPEG before uploading
   try {
-    const fileRes = await fetch(uri);
-    const blob = await fileRes.blob();
-    form.append('image', blob, fileName);
-  } catch {
-    form.append('image', { uri, name: fileName, type: mimeType });
+    const manip = await manipulateAsync(
+      uri,
+      [],
+      { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+    );
+    if (manip?.uri) {
+      uploadUri = manip.uri;
+      uploadBase64 = manip.base64 || uploadBase64;
+    }
+  } catch (manipErr) {
+    console.warn('ImageManipulator JPEG warning:', manipErr?.message || manipErr);
   }
+
+  // 2. Native FileSystem multipart upload for local files
+  const isLocalFile =
+    uploadUri &&
+    (uploadUri.startsWith('file:') || uploadUri.startsWith('content:'));
+
+  if (isLocalFile && FileSystem && typeof FileSystem.uploadAsync === 'function') {
+    try {
+      const headers = buildHeaders(true);
+      headers['ngrok-skip-browser-warning'] = 'true';
+      const parameters = {
+        preparation_context: preparationContext || 'home_cooked',
+      };
+      if (familyId) parameters.family_id = String(familyId);
+
+      const res = await FileSystem.uploadAsync(
+        `${API_BASE_URL}/api/v1/meals/upload`,
+        uploadUri,
+        {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'image',
+          mimeType: 'image/jpeg',
+          parameters,
+          headers,
+        }
+      );
+
+      if (res.status >= 200 && res.status < 300) {
+        return JSON.parse(res.body);
+      } else {
+        let detail = `Upload failed (${res.status})`;
+        try {
+          const parsed = JSON.parse(res.body);
+          if (parsed && parsed.detail) detail = parsed.detail;
+        } catch {}
+        throw new ApiError(detail, res.status, detail);
+      }
+    } catch (fsErr) {
+      if (fsErr instanceof ApiError) throw fsErr;
+      console.warn('FileSystem.uploadAsync fallback:', fsErr?.message || fsErr);
+    }
+  }
+
+  // 3. WinterCG-compliant fetch fallback
+  const form = new FormData();
+  if (uploadBase64) {
+    const clean = uploadBase64.includes(',') ? uploadBase64.split(',')[1] : uploadBase64;
+    const bin = atob(clean);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    form.append('image', {
+      name: fileName,
+      type: 'image/jpeg',
+      bytes: async () => bytes,
+    });
+  } else {
+    try {
+      const fileRes = await fetch(uploadUri);
+      const blob = await fileRes.blob();
+      form.append('image', blob, fileName);
+    } catch {
+      form.append('image', { uri: uploadUri, name: fileName, type: 'image/jpeg' });
+    }
+  }
+
   form.append('preparation_context', preparationContext);
   if (familyId) form.append('family_id', familyId);
   return request('/api/v1/meals/upload', {

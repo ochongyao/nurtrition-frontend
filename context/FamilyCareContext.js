@@ -256,11 +256,12 @@ export function FamilyCareProvider({ children }) {
   );
 
   const uploadMealPhoto = useCallback(
-    async (uri, preparationContext = 'home_cooked') => {
+    async (uri, preparationContext = 'home_cooked', options = {}) => {
       const result = await api.uploadMeal({
         uri,
         preparationContext,
         familyId: family?.id,
+        base64: options?.base64,
       });
       return uploadResultToMeal(result, { image: uri, currentUserName: user?.full_name || 'You' });
     },
