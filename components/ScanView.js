@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { DEMO_MEALS, pickLocalAnalysis } from '../data/mockFamily';
 import { PLANT_COLOR_HEX, UPF_TIER_LABELS } from '../api/adapters';
 import IngredientEditor from './IngredientEditor';
+import PrepDropdown from './PrepDropdown';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
@@ -29,13 +30,6 @@ const C = {
   terracottaLight: '#F6E5DE',
 };
 
-const PREP_CONTEXTS = [
-  { key: 'home_cooked', label: 'Home-Cooked' },
-  { key: 'dining_hall', label: 'Campus Dining' },
-  { key: 'takeout', label: 'Takeout' },
-  { key: 'packaged', label: 'Packaged' },
-];
-
 const SAMPLE_PLATES = {
   salmon: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80',
   ramen: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80',
@@ -45,6 +39,7 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
   const [image, setImage] = useState(null);
   const [prepContext, setPrepContext] = useState('home_cooked');
   const [analysis, setAnalysis] = useState(null);
+
   const [uploadedMeal, setUploadedMeal] = useState(null);
   const [loading, setLoading] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -236,21 +231,7 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
         <Text style={styles.subtitle}>Snap your plate and send some care home.</Text>
       </View>
 
-      <View style={styles.prepRow}>
-        {PREP_CONTEXTS.map((ctx) => {
-          const active = prepContext === ctx.key;
-          return (
-            <TouchableOpacity
-              key={ctx.key}
-              style={[styles.prepChip, active && styles.prepChipActive]}
-              onPress={() => setPrepContext(ctx.key)}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.prepText, active && styles.prepTextActive]}>{ctx.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <PrepDropdown value={prepContext} onChange={setPrepContext} />
 
       <View style={styles.viewfinder}>
         {image ? (
@@ -359,19 +340,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: SERIF, fontSize: 28, color: C.text, letterSpacing: 0.2 },
   subtitle: { fontSize: 14, color: C.muted, marginTop: 4, lineHeight: 20 },
 
-  prepRow: { flexDirection: 'row', gap: 6 },
-  prepChip: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-  },
-  prepChipActive: { backgroundColor: C.matcha, borderColor: C.matcha },
-  prepText: { fontSize: 11, color: C.muted, fontWeight: '600' },
-  prepTextActive: { color: '#FFFFFF' },
 
   viewfinder: {
     borderRadius: 24,
