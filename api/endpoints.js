@@ -52,6 +52,9 @@ export const confirmPayment = (sessionId, planId = 'monthly') =>
     method: 'POST',
   });
 
+export const cancelSubscription = () =>
+  request('/api/v1/billing/cancel-subscription', { method: 'POST' });
+
 // Convert Base64 string to Uint8Array for WinterCG-compliant Expo Fetch
 const base64ToBytes = (base64) => {
   const clean = base64.includes(',') ? base64.split(',')[1] : base64;

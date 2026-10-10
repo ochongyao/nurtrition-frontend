@@ -25,6 +25,9 @@ const C = {
   matcha: '#4F7059',
   matchaLight: '#E8EFE9',
   terracotta: '#B25A3E',
+  gold: '#8B6508',
+  goldLight: '#FFFDF5',
+  goldBorder: '#E6D78C',
   stripeBlue: '#635BFF',
 };
 
@@ -47,6 +50,7 @@ export default function StripeCheckoutModal({
   const [selectedPlan, setSelectedPlan] = useState('monthly');
   const [loading, setLoading] = useState(false);
   const [testPaying, setTestPaying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [successNotice, setSuccessNotice] = useState(false);
 
   useEffect(() => {
@@ -100,6 +104,40 @@ export default function StripeCheckoutModal({
     }
   };
 
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure you want to switch back to the free tier?',
+      [
+        { text: 'Keep Pro', style: 'cancel' },
+        {
+          text: 'Cancel Membership',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              await api.cancelSubscription();
+              if (onSubscriptionUpdated) {
+                onSubscriptionUpdated({
+                  isSubscriber: false,
+                  tier: 'Family Explorer (Free)',
+                  expiresAt: null,
+                });
+              }
+              Alert.alert('Plan Updated', 'Your membership has been reverted to the free plan.');
+            } catch (err) {
+              Alert.alert('Error', err.detail || err.message || 'Could not cancel subscription.');
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isPro = !!subscription?.isSubscriber;
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.modalRoot}>
@@ -108,22 +146,60 @@ export default function StripeCheckoutModal({
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close" size={24} color={C.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>nurtrition Circle Pass</Text>
+          <Text style={styles.headerTitle}>
+            {isPro ? 'Your Membership' : 'nurtrition Circle Pass'}
+          </Text>
           <View style={{ width: 36 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {subscription?.isSubscriber ? (
-            <View style={styles.activeBanner}>
-              <Ionicons name="sparkles" size={18} color={C.matcha} />
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <Text style={styles.activeTitle}>Nurtrition Circle Pro Active</Text>
-                <Text style={styles.activeSub}>Your family circle has full access to unlimited audits & digests.</Text>
+          {isPro ? (
+            /* Dedicated Active Member View (No purchase buttons) */
+            <View style={styles.memberView}>
+              <View style={styles.activeHeroBox}>
+                <Text style={styles.activeHeroEmoji}>⭐</Text>
+                <Text style={styles.activeHeroTitle}>Nurtrition Circle Pro</Text>
+                <View style={styles.statusPill}>
+                  <View style={styles.statusPillDot} />
+                  <Text style={styles.statusPillText}>Active Subscription</Text>
+                </View>
+                <Text style={styles.activeHeroSub}>
+                  Your family circle has full access to unlimited vision plate audits, weekly digests, and grocery swap coaching.
+                </Text>
               </View>
-            </View>
-          ) : null}
 
-          {successNotice ? (
+              <View style={styles.benefitsCard}>
+                <Text style={styles.benefitsTitle}>Active Benefits Unlocked</Text>
+                {BENEFITS.map((b, i) => (
+                  <View key={i} style={styles.benefitRow}>
+                    <Ionicons name="checkmark-circle" size={17} color={C.matcha} />
+                    <Text style={styles.benefitText}>{b}</Text>
+                  </View>
+                ))}
+                {subscription?.expiresAt ? (
+                  <Text style={styles.expiryNote}>
+                    Renews: {new Date(subscription.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                ) : null}
+              </View>
+
+              <TouchableOpacity style={styles.doneBtn} onPress={onClose} activeOpacity={0.88}>
+                <Text style={styles.doneBtnText}>Back to Kitchen Table</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelLink}
+                onPress={handleCancelSubscription}
+                disabled={cancelling}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelLinkText}>
+                  {cancelling ? 'Updating...' : 'Cancel Subscription (Switch back to Free)'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : successNotice ? (
+            /* Celebration Screen immediately after checkout */
             <View style={styles.celebrationCard}>
               <Text style={styles.celebrationEmoji}>🎉</Text>
               <Text style={styles.celebrationTitle}>Welcome to Circle Pro!</Text>
@@ -135,8 +211,8 @@ export default function StripeCheckoutModal({
               </TouchableOpacity>
             </View>
           ) : (
+            /* Purchase & Checkout View for Free Users */
             <>
-              {/* Hero */}
               <View style={styles.heroSection}>
                 <View style={styles.pillBadge}>
                   <Text style={styles.pillBadgeText}>🌱 Care Table Membership</Text>
@@ -147,7 +223,6 @@ export default function StripeCheckoutModal({
                 </Text>
               </View>
 
-              {/* Plans */}
               <View style={styles.planSwitchContainer}>
                 <TouchableOpacity
                   style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardActive]}
@@ -179,7 +254,6 @@ export default function StripeCheckoutModal({
                 </TouchableOpacity>
               </View>
 
-              {/* Benefits */}
               <View style={styles.benefitsCard}>
                 <Text style={styles.benefitsTitle}>What your circle unlocks</Text>
                 {BENEFITS.map((b, i) => (
@@ -190,7 +264,6 @@ export default function StripeCheckoutModal({
                 ))}
               </View>
 
-              {/* Stripe Checkout */}
               <TouchableOpacity
                 style={[styles.stripePayBtn, loading && styles.btnDisabled]}
                 onPress={handleStripeCheckout}
@@ -209,7 +282,6 @@ export default function StripeCheckoutModal({
                 )}
               </TouchableOpacity>
 
-              {/* Instant Test Activation */}
               <View style={styles.directCardBox}>
                 <View style={styles.cardPreviewRow}>
                   <Text style={styles.cardPreviewNum}>4242 •••• •••• 4242</Text>
@@ -256,18 +328,35 @@ const styles = StyleSheet.create({
   closeBtn: { padding: 6, borderRadius: 20, backgroundColor: C.canvas },
   headerTitle: { fontFamily: SERIF, fontSize: 17, fontWeight: '600', color: C.text },
   scrollContent: { padding: 20, paddingBottom: 40 },
-  activeBanner: {
+  memberView: { gap: 16 },
+  activeHeroBox: {
+    backgroundColor: C.goldLight,
+    borderWidth: 1.5,
+    borderColor: C.goldBorder,
+    borderRadius: 20,
+    padding: 22,
+    alignItems: 'center',
+  },
+  activeHeroEmoji: { fontSize: 40, marginBottom: 8 },
+  activeHeroTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: C.gold, marginBottom: 8 },
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.matchaLight,
+    gap: 6,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#C2DBC6',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: C.goldBorder,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 10,
   },
-  activeTitle: { fontFamily: SERIF, fontSize: 14, fontWeight: '700', color: C.matcha },
-  activeSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+  statusPillDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#2E7D32' },
+  statusPillText: { fontSize: 12, fontWeight: '700', color: '#2E7D32' },
+  activeHeroSub: { fontSize: 13, lineHeight: 19, color: C.muted, textAlign: 'center' },
+  expiryNote: { fontSize: 12, color: C.muted, marginTop: 10, fontStyle: 'italic' },
+  cancelLink: { alignSelf: 'center', paddingVertical: 10 },
+  cancelLinkText: { fontSize: 12.5, color: C.terracotta, fontWeight: '600' },
   heroSection: { alignItems: 'center', marginBottom: 20 },
   pillBadge: {
     backgroundColor: C.matchaLight,
@@ -382,6 +471,6 @@ const styles = StyleSheet.create({
   celebrationEmoji: { fontSize: 44, marginBottom: 10 },
   celebrationTitle: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: C.text, marginBottom: 6 },
   celebrationSub: { fontSize: 13, lineHeight: 19, color: C.muted, textAlign: 'center', marginBottom: 18 },
-  doneBtn: { backgroundColor: C.matcha, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  doneBtn: { backgroundColor: C.matcha, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, alignItems: 'center' },
   doneBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 });
