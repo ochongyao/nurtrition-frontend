@@ -37,6 +37,21 @@ export const editMeal = (mealId, payload) =>
 export const reactToMeal = (mealId, emoji) =>
   request(`/api/v1/meals/${mealId}/react`, { method: 'POST', body: { emoji } });
 
+export const getBillingConfig = () => request('/api/v1/billing/config', { auth: false });
+
+export const getSubscriptionStatus = () => request('/api/v1/billing/status');
+
+export const createCheckoutSession = (planId = 'monthly') =>
+  request('/api/v1/billing/create-checkout-session', {
+    method: 'POST',
+    body: { plan_id: planId },
+  });
+
+export const confirmPayment = (sessionId, planId = 'monthly') =>
+  request(`/api/v1/billing/confirm-payment?session_id=${sessionId}&plan_id=${planId}`, {
+    method: 'POST',
+  });
+
 // Convert Base64 string to Uint8Array for WinterCG-compliant Expo Fetch
 const base64ToBytes = (base64) => {
   const clean = base64.includes(',') ? base64.split(',')[1] : base64;

@@ -42,6 +42,26 @@ export function FamilyCareProvider({ children }) {
   const [meals, setMeals] = useState([]);
   const [weekly, setWeekly] = useState(null);
   const [isReady, setIsReady] = useState(false);
+  const [subscription, setSubscription] = useState({
+    isSubscriber: false,
+    tier: 'Family Explorer (Free)',
+    expiresAt: null,
+  });
+
+  const refreshSubscription = useCallback(async () => {
+    try {
+      const res = await api.getSubscriptionStatus();
+      if (res) {
+        setSubscription({
+          isSubscriber: !!res.is_subscriber,
+          tier: res.tier || 'Family Explorer (Free)',
+          expiresAt: res.expires_at || null,
+        });
+      }
+    } catch {
+      // Keep existing state
+    }
+  }, []);
 
   const loadFamilyData = useCallback(async (familyId, currentUserName, forceWeekly = false) => {
     const [feed, digest] = await Promise.all([
@@ -359,6 +379,9 @@ export function FamilyCareProvider({ children }) {
     transmit,
     react,
     updateProfile,
+    subscription,
+    refreshSubscription,
+    setSubscription,
     setMode,
   };
 
