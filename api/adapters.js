@@ -34,6 +34,13 @@ const countsFromEmojis = (emojis) => ({
   nurture: emojis.includes(REACTION_EMOJI.nurture) ? 1 : 0,
 });
 
+export const UPF_TIER_LABELS = {
+  unprocessed: 'Whole & unprocessed',
+  minimally_processed: 'Minimally processed',
+  processed: 'Lightly processed',
+  ultra_processed: 'Ultra-processed treat',
+};
+
 export function feedItemToMeal(item, { currentUserName } = {}) {
   const reactionEmojis = asList(item.reactions);
   const plantColors = asList(item.plant_colors);
@@ -49,8 +56,11 @@ export function feedItemToMeal(item, { currentUserName } = {}) {
     healthScore: item.normalized_score,
     plants: plantColors.length,
     plantColors,
+    detectedIngredients: asList(item.detected_ingredients),
+    upfTier: item.upf_tier || 'unprocessed',
     feedback: item.reassurance_note,
     postedLabel: relativeTime(item.created_at),
+    createdAt: item.created_at,
     reactions: countsFromEmojis(reactionEmojis),
     reactionEmojis,
   };
@@ -58,8 +68,17 @@ export function feedItemToMeal(item, { currentUserName } = {}) {
 
 export function uploadResultToMeal(result, { image, currentUserName } = {}) {
   const plantColors = asList(result.plant_colors);
+  const detectedIngredients = asList(result.detected_ingredients);
+  const scores = result.scores || {
+    plant_points: result.plant_score || 0,
+    whole_food_points: result.whole_food_score || 0,
+    protein_points: result.protein_score || 0,
+    upf_penalty: result.penalty_score || 0,
+    raw_total: result.raw_score || 0,
+  };
+
   return {
-    id: result.meal_id,
+    id: result.meal_id || result.id,
     source: 'api',
     memberId: 'me',
     authorName: currentUserName || 'You',
@@ -68,13 +87,24 @@ export function uploadResultToMeal(result, { image, currentUserName } = {}) {
     placeholderEmoji: '🍽️',
     dishName: result.meal_name,
     healthScore: result.normalized_score,
+    rawScore: scores.raw_total ?? result.raw_score,
+    scores,
     plants: plantColors.length,
     plantColors,
+    detectedIngredients,
+    upfTier: result.upf_tier || 'unprocessed',
+    confidence: result.confidence != null ? result.confidence : result.ai_confidence,
+    requiresManualTags: Boolean(result.requires_manual_tags),
     feedback: result.reassurance_note,
     postedLabel: 'Just now',
+    createdAt: result.created_at || new Date().toISOString(),
     reactions: { acknowledge: 0, nurture: 0 },
     reactionEmojis: [],
   };
+}
+
+export function auditResponseToMeal(audit, { currentUserName } = {}) {
+  return uploadResultToMeal(audit, { image: audit.image_url, currentUserName });
 }
 
 export function weeklyToRows(weekly) {
@@ -90,6 +120,7 @@ export function weeklyToRows(weekly) {
     highlight: row.top_meal,
   }));
 }
+
 
 const ACTIVITY_FROM_API = {
   sedentary: 'SEDENTARY',

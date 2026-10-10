@@ -1,13 +1,25 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import * as api from '../api/endpoints';
 import { setAuthToken } from '../api/client';
 import {
   feedItemToMeal,
   uploadResultToMeal,
+  auditResponseToMeal,
   weeklyToRows,
   profileFromMe,
   emojiForType,
 } from '../api/adapters';
+import {
+  getStoredToken,
+  setStoredToken,
+  getStoredUser,
+  setStoredUser,
+  getStoredFamily,
+  setStoredFamily,
+  getStoredProfile,
+  setStoredProfile,
+  clearStoredSession,
+} from '../api/storage';
 import {
   seedMeals,
   familyMembers,
@@ -21,14 +33,85 @@ const FamilyCareContext = createContext(null);
 const NAMES = { mom: 'Mom', sis: 'Sister', me: 'You' };
 
 export function FamilyCareProvider({ children }) {
-  const [mode, setMode] = useState('offline');
+  const [mode, setMode] = useState('live');
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [family, setFamily] = useState(null);
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
-  const [meals, setMeals] = useState(seedMeals);
+  const [meals, setMeals] = useState([]);
   const [weekly, setWeekly] = useState(null);
+  const [isReady, setIsReady] = useState(false);
+
+  const loadFamilyData = useCallback(async (familyId, currentUserName, forceWeekly = false) => {
+    const [feed, digest] = await Promise.all([
+      api.getFamilyFeed(familyId, { limit: 50 }).catch(() => null),
+      api.getWeeklyDigest(familyId, forceWeekly).catch(() => null),
+    ]);
+    if (Array.isArray(feed)) {
+      setMeals(feed.map((item) => feedItemToMeal(item, { currentUserName })));
+    }
+    if (digest) setWeekly(digest);
+  }, []);
+
+  // 1. Initialize session on app start from backend API
+  useEffect(() => {
+    let mounted = true;
+    async function initSession() {
+      try {
+        const [savedToken, savedUser, savedFamily, savedProfile] = await Promise.all([
+          getStoredToken(),
+          getStoredUser(),
+          getStoredFamily(),
+          getStoredProfile(),
+        ]);
+
+        if (!mounted) return;
+
+        if (savedProfile) {
+          setUserProfile(savedProfile);
+        }
+
+        if (savedToken) {
+          setAuthToken(savedToken);
+        }
+
+        // Always attempt connection to backend API
+        try {
+          const me = await api.getMe();
+          if (!mounted) return;
+          const merged = { ...(savedUser || {}), ...me, profile: me.profile };
+          setUser(merged);
+          setMode('live');
+          if (merged.family_id) {
+            const activeFamily = savedFamily || { id: merged.family_id, name: 'Family Table' };
+            setFamily(activeFamily);
+            await loadFamilyData(merged.family_id, merged.full_name);
+          }
+        } catch (err) {
+          if (err?.status === 401 && savedToken) {
+            await clearStoredSession();
+            setAuthToken(null);
+          }
+          // If backend offline or unreachable, fall back to seed data
+          if (!savedUser) {
+            setMeals(seedMeals);
+            setMode('offline');
+          }
+        }
+      } catch {
+        setMeals(seedMeals);
+        setMode('offline');
+      } finally {
+        if (mounted) setIsReady(true);
+      }
+    }
+
+    initSession();
+    return () => {
+      mounted = false;
+    };
+  }, [loadFamilyData]);
 
   const offlineStandings = useMemo(() => {
     const resolved = familyMembers.map((member) =>
@@ -51,27 +134,24 @@ export function FamilyCareProvider({ children }) {
   const standings =
     mode === 'live' && liveStandings.length ? liveStandings : offlineStandings;
 
-  const loadFamilyData = useCallback(async (familyId, currentUserName) => {
-    const [feed, digest] = await Promise.all([
-      api.getFamilyFeed(familyId, { limit: 50 }).catch(() => null),
-      api.getWeeklyDigest(familyId).catch(() => null),
-    ]);
-    if (Array.isArray(feed)) {
-      setMeals(feed.map((item) => feedItemToMeal(item, { currentUserName })));
-    }
-    if (digest) setWeekly(digest);
-  }, []);
-
   const applySession = useCallback(
     async (session) => {
       setAuthToken(session.access_token);
+      await setStoredToken(session.access_token);
       const me = await api.getMe().catch(() => null);
       const merged = me ? { ...session.user, ...me, profile: me.profile } : session.user;
       setUser(merged);
-      setUserProfile(profileFromMe(merged, defaultUserProfile));
+      await setStoredUser(merged);
+
+      const resolvedProfile = profileFromMe(merged, defaultUserProfile);
+      setUserProfile(resolvedProfile);
+      await setStoredProfile(resolvedProfile);
+
       setMode('live');
       if (merged.family_id) {
-        setFamily({ id: merged.family_id, name: 'Your family', invite_code: '' });
+        const fam = { id: merged.family_id, name: 'Family Table', invite_code: '' };
+        setFamily(fam);
+        await setStoredFamily(fam);
         await loadFamilyData(merged.family_id, merged.full_name);
       } else {
         setFamily(null);
@@ -116,7 +196,8 @@ export function FamilyCareProvider({ children }) {
     [applySession]
   );
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
+    await clearStoredSession();
     setAuthToken(null);
     setUser(null);
     setFamily(null);
@@ -133,6 +214,7 @@ export function FamilyCareProvider({ children }) {
       try {
         const fam = await api.createFamily(name);
         setFamily(fam);
+        await setStoredFamily(fam);
         await loadFamilyData(fam.id, user?.full_name);
         return { ok: true, family: fam };
       } catch (e) {
@@ -147,6 +229,7 @@ export function FamilyCareProvider({ children }) {
       try {
         const fam = await api.joinFamily(inviteCode);
         setFamily(fam);
+        await setStoredFamily(fam);
         await loadFamilyData(fam.id, user?.full_name);
         return { ok: true, family: fam };
       } catch (e) {
@@ -156,12 +239,21 @@ export function FamilyCareProvider({ children }) {
     [user, loadFamilyData]
   );
 
-  const refresh = useCallback(async () => {
-    if (mode !== 'live' || !family) return;
-    setStatus('loading');
-    await loadFamilyData(family.id, user?.full_name);
-    setStatus('idle');
-  }, [mode, family, user, loadFamilyData]);
+  const refresh = useCallback(
+    async (forceWeekly = false) => {
+      setStatus('loading');
+      if (family) {
+        await loadFamilyData(family.id, user?.full_name, forceWeekly);
+      } else {
+        const me = await api.getMe().catch(() => null);
+        if (me && me.family_id) {
+          await loadFamilyData(me.family_id, me.full_name, forceWeekly);
+        }
+      }
+      setStatus('idle');
+    },
+    [family, user, loadFamilyData]
+  );
 
   const uploadMealPhoto = useCallback(
     async (uri, preparationContext = 'home_cooked') => {
@@ -170,25 +262,51 @@ export function FamilyCareProvider({ children }) {
         preparationContext,
         familyId: family?.id,
       });
-      return uploadResultToMeal(result, { image: uri, currentUserName: user?.full_name });
+      return uploadResultToMeal(result, { image: uri, currentUserName: user?.full_name || 'You' });
     },
     [family, user]
+  );
+
+  const editMealIngredients = useCallback(
+    async (mealId, payload) => {
+      try {
+        const updatedAudit = await api.editMeal(mealId, payload);
+        const updatedMeal = auditResponseToMeal(updatedAudit, { currentUserName: user?.full_name || 'You' });
+        setMeals((prev) =>
+          prev.map((m) => (m.id === mealId ? { ...m, ...updatedMeal } : m))
+        );
+        return { ok: true, meal: updatedMeal };
+      } catch (e) {
+        return { ok: false, error: e.detail || e.message };
+      }
+    },
+    [user]
+  );
+
+  const getMealAudit = useCallback(
+    async (mealId) => {
+      try {
+        return await api.getMeal(mealId);
+      } catch {
+        return meals.find((m) => m.id === mealId) || null;
+      }
+    },
+    [meals]
   );
 
   const transmit = useCallback(
     (meal) => {
       setMeals((prev) => [meal, ...prev.filter((m) => m.id !== meal.id)]);
-      if (mode === 'live' && family) {
+      if (family) {
         loadFamilyData(family.id, user?.full_name).catch(() => {});
       }
     },
-    [mode, family, user, loadFamilyData]
+    [family, user, loadFamilyData]
   );
 
   const react = useCallback(
     (mealId, type) => {
       const emoji = emojiForType(type);
-      const target = meals.find((meal) => meal.id === mealId);
       setMeals((prev) =>
         prev.map((meal) => {
           if (meal.id !== mealId) return meal;
@@ -207,14 +325,15 @@ export function FamilyCareProvider({ children }) {
           };
         })
       );
-      if (mode === 'live' && target?.source === 'api') {
-        api.reactToMeal(mealId, emoji).catch(() => {});
-      }
+      api.reactToMeal(mealId, emoji).catch(() => {});
     },
-    [meals, mode]
+    []
   );
 
-  const updateProfile = useCallback((next) => setUserProfile(next), []);
+  const updateProfile = useCallback(async (next) => {
+    setUserProfile(next);
+    await setStoredProfile(next);
+  }, []);
 
   const value = {
     mode,
@@ -226,6 +345,7 @@ export function FamilyCareProvider({ children }) {
     meals,
     standings,
     weekly,
+    isReady,
     signIn,
     signUp,
     signOut,
@@ -233,9 +353,12 @@ export function FamilyCareProvider({ children }) {
     joinFamily,
     refresh,
     uploadMealPhoto,
+    editMealIngredients,
+    getMealAudit,
     transmit,
     react,
     updateProfile,
+    setMode,
   };
 
   return <FamilyCareContext.Provider value={value}>{children}</FamilyCareContext.Provider>;

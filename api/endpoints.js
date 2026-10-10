@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { request } from './client';
 
 export const register = (payload) =>
@@ -22,15 +23,29 @@ export const getWeeklyDigest = (familyId, forceRefresh = false) =>
 
 export const getMeal = (mealId) => request(`/api/v1/meals/${mealId}`);
 
+export const editMeal = (mealId, payload) =>
+  request(`/api/v1/meals/${mealId}`, { method: 'PATCH', body: payload });
+
 export const reactToMeal = (mealId, emoji) =>
   request(`/api/v1/meals/${mealId}/react`, { method: 'POST', body: { emoji } });
 
-export const uploadMeal = ({ uri, preparationContext = 'home_cooked', familyId } = {}) => {
+export const uploadMeal = async ({ uri, preparationContext = 'home_cooked', familyId } = {}) => {
   const formData = new FormData();
   const name = (uri && uri.split('/').pop()) || 'meal_photo.jpg';
-  formData.append('image', { uri, name, type: 'image/jpeg' });
+
+  if (Platform.OS === 'web' && uri && (uri.startsWith('blob:') || uri.startsWith('data:'))) {
+    try {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      formData.append('image', blob, name);
+    } catch {
+      formData.append('image', { uri, name, type: 'image/jpeg' });
+    }
+  } else {
+    formData.append('image', { uri, name, type: 'image/jpeg' });
+  }
+
   formData.append('preparation_context', preparationContext);
   if (familyId) formData.append('family_id', familyId);
-  // Upload + AI analysis can be slow, so allow a longer window than reads.
   return request('/api/v1/meals/upload', { method: 'POST', body: formData, timeout: 45000 });
 };

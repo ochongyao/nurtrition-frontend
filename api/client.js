@@ -1,4 +1,10 @@
-export const API_BASE_URL = 'https://wheatless-jermaine-aftmost.ngrok-free.dev';
+import { Platform } from 'react-native';
+
+const LOCAL_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || LOCAL_HOST;
+
+// Fallback user ID for development/offline testing if no JWT access token is active
+export const DEFAULT_DEV_USER_ID = 'dfece1b2-0200-4d68-8485-36f28c52d3f6';
 
 let authToken = null;
 
@@ -19,7 +25,6 @@ export class ApiError extends Error {
 
 const BASE_HEADERS = {
   Accept: 'application/json',
-  // ngrok's free tier serves an interstitial page to browser-like clients.
   'ngrok-skip-browser-warning': 'true',
 };
 
@@ -31,7 +36,7 @@ const readError = async (response) => {
       detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
     }
   } catch {
-    // Non-JSON error body: keep the status-based message.
+    // Non-JSON error body: keep status-based message
   }
   return new ApiError(detail, response.status, detail);
 };
@@ -41,7 +46,7 @@ export async function request(path, options = {}) {
     method = 'GET',
     body,
     headers = {},
-    timeout = 15000,
+    timeout = 20000,
     auth = true,
   } = options;
 
@@ -50,6 +55,16 @@ export async function request(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
+  // Authenticate using Bearer token or development fallback X-User-Id
+  const authHeaders = {};
+  if (auth) {
+    if (authToken) {
+      authHeaders.Authorization = `Bearer ${authToken}`;
+    } else {
+      authHeaders['X-User-Id'] = DEFAULT_DEV_USER_ID;
+    }
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -57,7 +72,7 @@ export async function request(path, options = {}) {
       headers: {
         ...BASE_HEADERS,
         ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-        ...(auth && authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...authHeaders,
         ...headers,
       },
       body: payload,

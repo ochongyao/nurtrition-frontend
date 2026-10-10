@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,10 +6,12 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
   Platform,
 } from 'react-native';
 import { getMemberById } from '../data/mockFamily';
 import { PLANT_COLOR_HEX } from '../api/adapters';
+import MealDetailModal from './MealDetailModal';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
@@ -45,107 +47,153 @@ const present = (meal) => {
   return { name, emoji, where };
 };
 
-export default function StreamView({ meals, onReact }) {
+export default function StreamView({ meals, onReact, onRefresh, onFetchAudit, refreshing = false }) {
+  const [selectedMeal, setSelectedMeal] = useState(null);
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>The Kitchen Table</Text>
-        <Text style={styles.subtitle}>What's on the table today?</Text>
-      </View>
-
-      {meals.length === 0 && (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>The table is empty</Text>
-          <Text style={styles.emptyText}>Share the first meal and it will show up here.</Text>
+    <>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={C.matcha}
+              colors={[C.matcha]}
+            />
+          ) : undefined
+        }
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>The Kitchen Table</Text>
+          <Text style={styles.subtitle}>What's on the table today?</Text>
         </View>
-      )}
 
-      {meals.map((meal) => {
-        const person = present(meal);
-        const hasMacros = meal.calories != null || meal.protein_g != null;
-        return (
-          <View key={meal.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarEmoji}>{person.emoji}</Text>
-              </View>
-              <View style={styles.headerText}>
-                <Text style={styles.headerTitle}>
-                  {person.name}
-                  {person.where ? ` · ${person.where}` : ''}
-                </Text>
-                <Text style={styles.headerMeta}>{meal.postedLabel}</Text>
-              </View>
-            </View>
-
-            <View style={styles.photo}>
-              {meal.image ? (
-                <Image source={{ uri: meal.image }} style={styles.photoImage} />
-              ) : (
-                <Text style={styles.photoEmoji}>{meal.placeholderEmoji}</Text>
-              )}
-            </View>
-
-            <View style={styles.cardBody}>
-              <Text style={styles.dishName}>{meal.dishName}</Text>
-
-              {hasMacros ? (
-                <Text style={styles.summary}>
-                  {meal.calories} kcal · {meal.protein_g}g protein · {meal.fiber_g}g fiber ·{' '}
-                  {meal.plants} plants
-                </Text>
-              ) : (
-                <Text style={styles.summary}>Nourishment score {meal.healthScore}/100</Text>
-              )}
-
-              {meal.plantColors?.length > 0 && (
-                <View style={styles.colorRow}>
-                  {meal.plantColors.map((color) => (
-                    <View key={color} style={styles.colorTag}>
-                      <View
-                        style={[styles.colorDot, { backgroundColor: PLANT_COLOR_HEX[color] || C.matcha }]}
-                      />
-                      <Text style={styles.colorText}>{String(color).replace('_', ' ')}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              <Text style={styles.feedback}>{meal.feedback}</Text>
-
-              <View style={styles.reactionRow}>
-                <TouchableOpacity
-                  style={[styles.reaction, styles.reactionProud]}
-                  onPress={() => onReact(meal.id, 'acknowledge')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.reactionText}>
-                    ❤️ Proud of you · {meal.reactions?.acknowledge ?? 0}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.reaction, styles.reactionHydrate]}
-                  onPress={() => onReact(meal.id, 'nurture')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.reactionText}>
-                    🍵 Stay hydrated · {meal.reactions?.nurture ?? 0}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+        {meals.length === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>The table is empty</Text>
+            <Text style={styles.emptyText}>Share the first meal and it will show up here.</Text>
           </View>
-        );
-      })}
+        )}
 
-      {meals.length > 0 && (
-        <Text style={styles.footer}>That's everything for now.</Text>
-      )}
-    </ScrollView>
+        {meals.map((meal) => {
+          const person = present(meal);
+          const hasMacros = meal.calories != null || meal.protein_g != null;
+          const reactedProud = meal.reactionEmojis?.includes('❤️');
+          const reactedHydrate = meal.reactionEmojis?.includes('🍵');
+
+          return (
+            <TouchableOpacity
+              key={meal.id}
+              style={styles.card}
+              activeOpacity={0.92}
+              onPress={() => setSelectedMeal(meal)}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarEmoji}>{person.emoji}</Text>
+                </View>
+                <View style={styles.headerText}>
+                  <Text style={styles.headerTitle}>
+                    {person.name}
+                    {person.where ? ` · ${person.where}` : ''}
+                  </Text>
+                  <Text style={styles.headerMeta}>{meal.postedLabel}</Text>
+                </View>
+                <View style={styles.scoreBadge}>
+                  <Text style={styles.scoreBadgeNum}>{meal.healthScore}</Text>
+                  <Text style={styles.scoreBadgeDen}>/100</Text>
+                </View>
+              </View>
+
+              <View style={styles.photo}>
+                {meal.image ? (
+                  <Image source={{ uri: meal.image }} style={styles.photoImage} resizeMode="cover" />
+                ) : (
+                  <Text style={styles.photoEmoji}>{meal.placeholderEmoji || '🍽️'}</Text>
+                )}
+              </View>
+
+              <View style={styles.cardBody}>
+                <View style={styles.dishNameRow}>
+                  <Text style={styles.dishName}>{meal.dishName}</Text>
+                </View>
+
+                {hasMacros ? (
+                  <Text style={styles.summary}>
+                    {meal.calories} kcal · {meal.protein_g}g protein · {meal.fiber_g}g fiber ·{' '}
+                    {meal.plants} plants
+                  </Text>
+                ) : (
+                  <Text style={styles.summary}>
+                    Nourishment score {meal.healthScore}/100 · {meal.plants || meal.plantColors?.length || 0} plant colors
+                  </Text>
+                )}
+
+                {meal.plantColors?.length > 0 && (
+                  <View style={styles.colorRow}>
+                    {meal.plantColors.map((color) => (
+                      <View key={color} style={styles.colorTag}>
+                        <View
+                          style={[styles.colorDot, { backgroundColor: PLANT_COLOR_HEX[color] || C.matcha }]}
+                        />
+                        <Text style={styles.colorText}>{String(color).replace('_', ' ')}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <Text style={styles.feedback}>"{meal.feedback}"</Text>
+
+                <View style={styles.reactionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.reaction,
+                      styles.reactionProud,
+                      reactedProud && styles.reactionProudActive,
+                    ]}
+                    onPress={() => onReact(meal.id, 'acknowledge')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.reactionText, reactedProud && styles.reactionTextActive]}>
+                      ❤️ Proud of you · {meal.reactions?.acknowledge ?? 0}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.reaction,
+                      styles.reactionHydrate,
+                      reactedHydrate && styles.reactionHydrateActive,
+                    ]}
+                    onPress={() => onReact(meal.id, 'nurture')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.reactionText, reactedHydrate && styles.reactionTextActive]}>
+                      🍵 Stay hydrated · {meal.reactions?.nurture ?? 0}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.inspectHint}>Tap card to view plate audit breakdown 🔍</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {meals.length > 0 && <Text style={styles.footer}>That's everything for now.</Text>}
+      </ScrollView>
+
+      <MealDetailModal
+        visible={Boolean(selectedMeal)}
+        meal={selectedMeal}
+        onClose={() => setSelectedMeal(null)}
+        onReact={onReact}
+        onFetchAudit={onFetchAudit}
+      />
+    </>
   );
 }
 
@@ -154,7 +202,7 @@ const styles = StyleSheet.create({
 
   header: { marginBottom: 4 },
   title: { fontFamily: SERIF, fontSize: 28, color: C.text, letterSpacing: 0.2 },
-  subtitle: { fontSize: 14, color: C.muted, marginTop: 6, lineHeight: 20 },
+  subtitle: { fontSize: 14, color: C.muted, marginTop: 4, lineHeight: 20 },
 
   card: {
     backgroundColor: C.card,
@@ -178,6 +226,17 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 15, color: C.text, fontWeight: '700' },
   headerMeta: { fontSize: 12, color: C.muted, marginTop: 2 },
 
+  scoreBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    backgroundColor: C.matchaLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  scoreBadgeNum: { fontFamily: SERIF, fontSize: 16, color: C.matcha, fontWeight: '700' },
+  scoreBadgeDen: { fontSize: 11, color: C.matcha },
+
   photo: {
     height: 180,
     borderRadius: 20,
@@ -185,11 +244,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.border,
   },
   photoImage: { width: '100%', height: '100%' },
   photoEmoji: { fontSize: 64 },
 
   cardBody: { gap: 8 },
+  dishNameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dishName: { fontFamily: SERIF, fontSize: 20, color: C.text, letterSpacing: 0.2 },
   summary: { fontSize: 13, color: C.muted, lineHeight: 19 },
   feedback: { fontSize: 13, color: C.text, lineHeight: 20, fontStyle: 'italic' },
@@ -208,10 +270,15 @@ const styles = StyleSheet.create({
   colorText: { fontSize: 11, color: C.text, fontWeight: '600', textTransform: 'capitalize' },
 
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  reaction: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
+  reaction: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'transparent' },
   reactionProud: { backgroundColor: C.terracottaLight },
+  reactionProudActive: { borderColor: C.terracotta, backgroundColor: '#F4D4C7' },
   reactionHydrate: { backgroundColor: C.matchaLight },
+  reactionHydrateActive: { borderColor: C.matcha, backgroundColor: '#D6E5D8' },
   reactionText: { fontSize: 13, color: C.text, fontWeight: '600' },
+  reactionTextActive: { fontWeight: '700' },
+
+  inspectHint: { fontSize: 11, color: C.muted, textAlign: 'center', marginTop: 2 },
 
   empty: {
     alignItems: 'center',

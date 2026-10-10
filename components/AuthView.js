@@ -10,6 +10,14 @@ import {
   Platform,
 } from 'react-native';
 import { useFamilyCare } from '../context/FamilyCareContext';
+import {
+  Field,
+  Choice,
+  ROLES,
+  SEXES,
+  ACTIVITIES,
+  DIETARY_OPTIONS,
+} from './AuthFields';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
@@ -25,23 +33,6 @@ const C = {
   terracottaLight: '#F6E5DE',
 };
 
-const ROLES = [
-  { key: 'student', label: 'Student' },
-  { key: 'parent', label: 'Parent' },
-  { key: 'member', label: 'Member' },
-];
-const SEXES = [
-  { key: 'female', label: 'Female' },
-  { key: 'male', label: 'Male' },
-  { key: 'other', label: 'Other' },
-];
-const ACTIVITIES = [
-  { key: 'sedentary', label: 'Sedentary' },
-  { key: 'moderate', label: 'Moderate' },
-  { key: 'active', label: 'Active' },
-  { key: 'athlete', label: 'Athlete' },
-];
-
 export default function AuthView({ onClose }) {
   const {
     mode,
@@ -55,6 +46,7 @@ export default function AuthView({ onClose }) {
     createFamily,
     joinFamily,
     refresh,
+    setMode,
   } = useFamilyCare();
 
   const [tab, setTab] = useState('signin');
@@ -65,11 +57,18 @@ export default function AuthView({ onClose }) {
   const [sex, setSex] = useState('female');
   const [age, setAge] = useState('20');
   const [activity, setActivity] = useState('moderate');
+  const [dietaryFlags, setDietaryFlags] = useState([]);
   const [familyName, setFamilyName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [message, setMessage] = useState(null);
 
   const busy = status === 'loading';
+
+  const toggleDietary = (flag) => {
+    setDietaryFlags((prev) =>
+      prev.includes(flag) ? prev.filter((f) => f !== flag) : [...prev, flag]
+    );
+  };
 
   const submit = async () => {
     setMessage(null);
@@ -86,7 +85,7 @@ export default function AuthView({ onClose }) {
       age: parseInt(age, 10) || 0,
       sex,
       activity_level: activity,
-      dietary_flags: [],
+      dietary_flags: dietaryFlags,
     });
     if (!res.ok) setMessage(res.error);
   };
@@ -106,9 +105,7 @@ export default function AuthView({ onClose }) {
   return (
     <View style={styles.overlay}>
       <View style={styles.topBar}>
-        <Text style={styles.topTitle}>
-          {mode === 'live' ? 'Account' : 'Connect'}
-        </Text>
+        <Text style={styles.topTitle}>{mode === 'live' ? 'Account' : 'Connect'}</Text>
         <TouchableOpacity onPress={onClose} activeOpacity={0.7} hitSlop={12}>
           <Text style={styles.close}>Close</Text>
         </TouchableOpacity>
@@ -119,7 +116,7 @@ export default function AuthView({ onClose }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {mode !== 'live' ? (
+        {!user ? (
           <>
             <Text style={styles.lead}>
               Sign in to sync your family table across devices, or keep enjoying the offline demo.
@@ -208,6 +205,25 @@ export default function AuthView({ onClose }) {
                 <Choice row options={SEXES} value={sex} onChange={setSex} />
                 <Text style={styles.fieldLabel}>Activity</Text>
                 <Choice options={ACTIVITIES} value={activity} onChange={setActivity} />
+
+                <Text style={styles.fieldLabel}>Dietary Preferences (Optional)</Text>
+                <View style={styles.dietaryRow}>
+                  {DIETARY_OPTIONS.map((item) => {
+                    const active = dietaryFlags.includes(item.key);
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
+                        style={[styles.dietaryChip, active && styles.dietaryChipActive]}
+                        onPress={() => toggleDietary(item.key)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.dietaryText, active && styles.dietaryTextActive]}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </>
             )}
 
@@ -268,74 +284,55 @@ export default function AuthView({ onClose }) {
             </TouchableOpacity>
 
             {(message || error) && <Text style={styles.error}>{message || error}</Text>}
-            <SignOut onPress={signOut} />
+            <TouchableOpacity style={styles.ghost} onPress={signOut} activeOpacity={0.7}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <>
             <Text style={styles.lead}>Signed in as {user?.full_name}.</Text>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Family circle </Text>
+                <Text style={styles.summaryKey}>Family circle: </Text>
                 {family.name}
               </Text>
               {!!family.invite_code && (
-                <Text style={styles.summaryRow}>
-                  <Text style={styles.summaryKey}>Invite code </Text>
-                  {family.invite_code}
-                </Text>
+                <View style={styles.inviteBox}>
+                  <Text style={styles.inviteLabel}>Family Invite Code:</Text>
+                  <Text style={styles.inviteCodeText}>{family.invite_code}</Text>
+                  <Text style={styles.inviteHint}>Share this code with family members to join</Text>
+                </View>
               )}
               <Text style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Email </Text>
+                <Text style={styles.summaryKey}>Role: </Text>
+                {user?.role}
+              </Text>
+              <Text style={styles.summaryRow}>
+                <Text style={styles.summaryKey}>Email: </Text>
                 {user?.email}
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.ghostSolid} onPress={refresh} disabled={busy} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.ghostSolid} onPress={() => refresh(true)} disabled={busy} activeOpacity={0.85}>
               <Text style={styles.ghostSolidText}>Refresh the table</Text>
             </TouchableOpacity>
-            <SignOut onPress={signOut} />
+
+            <TouchableOpacity
+              style={styles.modeSwitchBtn}
+              onPress={() => setMode(mode === 'live' ? 'offline' : 'live')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modeSwitchText}>
+                {mode === 'live' ? '⇄  Preview Offline Demo' : '⇄  Return to Live Sync'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.ghost} onPress={signOut} activeOpacity={0.7}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
-    </View>
-  );
-}
-
-function SignOut({ onPress }) {
-  return (
-    <TouchableOpacity style={styles.ghost} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.signOutText}>Sign out</Text>
-    </TouchableOpacity>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-function Choice({ options, value, onChange, row }) {
-  return (
-    <View style={[styles.choiceWrap, row && styles.choiceRow]}>
-      {options.map((option) => {
-        const active = value === option.key;
-        return (
-          <TouchableOpacity
-            key={option.key}
-            style={[styles.choice, active && styles.choiceActive]}
-            onPress={() => onChange(option.key)}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
     </View>
   );
 }
@@ -353,7 +350,6 @@ const styles = StyleSheet.create({
   close: { fontSize: 14, color: C.matcha, fontWeight: '700' },
 
   body: { paddingHorizontal: 20, paddingBottom: 48, gap: 14 },
-
   lead: { fontSize: 14, color: C.muted, lineHeight: 21, marginBottom: 2 },
 
   segment: {
@@ -370,7 +366,6 @@ const styles = StyleSheet.create({
   segmentText: { fontSize: 13, color: C.muted, fontWeight: '600' },
   segmentTextActive: { color: '#FFFFFF' },
 
-  field: { flex: 1 },
   fieldLabel: { fontSize: 12, color: C.muted, marginBottom: 6, marginTop: 2 },
   input: {
     borderWidth: 1,
@@ -385,20 +380,18 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', gap: 10 },
   inlineField: { flex: 1 },
 
-  choiceWrap: { gap: 8 },
-  choiceRow: { flexDirection: 'row' },
-  choice: {
-    flex: 1,
+  dietaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  dietaryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: 999,
     backgroundColor: C.card,
-    paddingVertical: 11,
-    alignItems: 'center',
   },
-  choiceActive: { backgroundColor: C.matcha, borderColor: C.matcha },
-  choiceText: { fontSize: 12, color: C.muted, fontWeight: '600' },
-  choiceTextActive: { color: '#FFFFFF' },
+  dietaryChipActive: { backgroundColor: C.matchaLight, borderColor: C.matcha },
+  dietaryText: { fontSize: 12, color: C.muted, fontWeight: '600' },
+  dietaryTextActive: { color: C.matcha, fontWeight: '700' },
 
   primary: {
     backgroundColor: C.matcha,
@@ -410,7 +403,7 @@ const styles = StyleSheet.create({
   primaryBusy: { opacity: 0.8 },
   primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
-  ghost: { alignItems: 'center', paddingVertical: 12 },
+  ghost: { alignItems: 'center', paddingVertical: 10 },
   ghostText: { fontSize: 13, color: C.muted, fontWeight: '600' },
   ghostSolid: {
     borderWidth: 1,
@@ -420,8 +413,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ghostSolidText: { color: C.matcha, fontSize: 15, fontWeight: '700' },
-  signOutText: { fontSize: 13, color: C.terracotta, fontWeight: '700' },
 
+  modeSwitchBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: C.canvas,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modeSwitchText: { fontSize: 12, color: C.muted, fontWeight: '600' },
+
+  signOutText: { fontSize: 13, color: C.terracotta, fontWeight: '700' },
   or: { textAlign: 'center', color: C.muted, fontSize: 13, marginVertical: 2 },
 
   error: {
@@ -439,8 +442,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     padding: 18,
-    gap: 8,
+    gap: 10,
   },
   summaryRow: { fontSize: 14, color: C.text },
-  summaryKey: { color: C.muted },
+  summaryKey: { color: C.muted, fontWeight: '600' },
+
+  inviteBox: {
+    backgroundColor: C.matchaLight,
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+    marginVertical: 4,
+  },
+  inviteLabel: { fontSize: 11, color: C.matcha, fontWeight: '700', letterSpacing: 0.3 },
+  inviteCodeText: { fontFamily: SERIF, fontSize: 22, color: C.matcha, letterSpacing: 2 },
+  inviteHint: { fontSize: 11, color: C.matcha },
 });

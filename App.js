@@ -27,6 +27,7 @@ function AppShell() {
 
   const {
     mode,
+    status,
     user,
     family,
     meals,
@@ -36,6 +37,9 @@ function AppShell() {
     transmit,
     react,
     uploadMealPhoto,
+    editMealIngredients,
+    getMealAudit,
+    refresh,
     updateProfile,
   } = useFamilyCare();
 
@@ -57,6 +61,8 @@ function AppShell() {
       </View>
     );
   }
+
+  const isRefreshing = status === 'loading';
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -80,15 +86,24 @@ function AppShell() {
       </View>
 
       <View style={styles.screen}>
-        {activeTab === 'table' && <StreamView meals={meals} onReact={react} />}
+        {activeTab === 'table' && (
+          <StreamView
+            meals={meals}
+            onReact={react}
+            onRefresh={() => refresh(false)}
+            onFetchAudit={getMealAudit}
+            refreshing={isRefreshing}
+          />
+        )}
         {activeTab === 'share' && (
           <ScanView
-            live={mode === 'live'}
             onUpload={uploadMealPhoto}
+            onEditMeal={editMealIngredients}
             onTransmit={transmit}
             onDone={goToTable}
           />
         )}
+
         {activeTab === 'rhythm' && (
           <StandingsView
             standings={standings}
@@ -96,6 +111,8 @@ function AppShell() {
             weekly={weekly}
             userProfile={userProfile}
             onUpdateProfile={updateProfile}
+            onRefresh={() => refresh(true)}
+            refreshing={isRefreshing}
           />
         )}
       </View>
@@ -103,6 +120,7 @@ function AppShell() {
       <NavBar activeTab={activeTab} onChange={setActiveTab} />
     </View>
   );
+
 }
 
 export default function App() {

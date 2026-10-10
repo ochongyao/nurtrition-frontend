@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { DEMO_MEALS, pickLocalAnalysis } from '../data/mockFamily';
-import { PLANT_COLOR_HEX } from '../api/adapters';
+import { PLANT_COLOR_HEX, UPF_TIER_LABELS } from '../api/adapters';
+import IngredientEditor from './IngredientEditor';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
@@ -28,24 +29,25 @@ const C = {
   terracottaLight: '#F6E5DE',
 };
 
-const NOVA_LABELS = {
-  1: 'Whole & unprocessed',
-  2: 'Simple culinary',
-  3: 'Processed',
-  4: 'Ultra-processed',
+const PREP_CONTEXTS = [
+  { key: 'home_cooked', label: 'Home-Cooked' },
+  { key: 'dining_hall', label: 'Campus Dining' },
+  { key: 'takeout', label: 'Takeout' },
+  { key: 'packaged', label: 'Packaged' },
+];
+
+const SAMPLE_PLATES = {
+  salmon: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80',
+  ramen: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80',
 };
 
-const pad = (n) => String(n).padStart(2, '0');
-const nowClock = () => {
-  const d = new Date();
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
-export default function ScanView({ live, onUpload, onTransmit, onDone }) {
+export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
   const [image, setImage] = useState(null);
+  const [prepContext, setPrepContext] = useState('home_cooked');
   const [analysis, setAnalysis] = useState(null);
   const [uploadedMeal, setUploadedMeal] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const [transmitted, setTransmitted] = useState(false);
 
   const reset = () => {
@@ -56,9 +58,55 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
     setLoading(false);
   };
 
-  const analyzeLocally = () => {
+  const processImageUri = async (uri) => {
+    setImage(uri);
+    setTransmitted(false);
+    setAnalysis(null);
     setUploadedMeal(null);
-    setAnalysis({ ...pickLocalAnalysis(), source: 'local' });
+    setLoading(true);
+
+    if (onUpload) {
+      try {
+        const meal = await onUpload(uri, prepContext);
+        setUploadedMeal(meal);
+        setAnalysis({
+          source: 'api',
+          mealId: meal.id,
+          dishName: meal.dishName,
+          healthScore: meal.healthScore,
+          rawScore: meal.rawScore,
+          scores: meal.scores,
+          feedback: meal.feedback,
+          plantColors: meal.plantColors || [],
+          detectedIngredients: meal.detectedIngredients || [],
+          upfTier: meal.upfTier || 'unprocessed',
+          confidence: meal.confidence,
+          requiresManualTags: meal.requiresManualTags,
+        });
+        setLoading(false);
+        return;
+      } catch (e) {
+        Alert.alert(
+          'API Notice',
+          `${e.message || 'Could not connect to backend'}. Using offline sample preview.`
+        );
+      }
+    }
+
+    // Local analysis fallback only if backend completely unreachable
+    const local = pickLocalAnalysis();
+    setUploadedMeal(null);
+    setAnalysis({
+      source: 'local',
+      mealId: `local-${Date.now()}`,
+      dishName: local.dishName,
+      healthScore: local.healthScore,
+      feedback: local.feedback,
+      plantColors: ['green', 'orange'],
+      detectedIngredients: ['greens', 'quinoa', 'olive oil'],
+      upfTier: 'unprocessed',
+      requiresManualTags: false,
+    });
     setLoading(false);
   };
 
@@ -70,46 +118,86 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
     }
 
     const res = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'], // SDK 57: MediaTypeOptions is deprecated
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.5,
     });
 
     if (res.canceled) return;
-    const uri = res.assets[0].uri;
-    setImage(uri);
-    setTransmitted(false);
-    setAnalysis(null);
-    setUploadedMeal(null);
-    setLoading(true);
+    processImageUri(res.assets[0].uri);
+  };
 
-    if (live && onUpload) {
-      try {
-        const meal = await onUpload(uri);
-        setUploadedMeal(meal);
-        setAnalysis({
-          source: 'api',
-          dishName: meal.dishName,
-          healthScore: meal.healthScore,
-          feedback: meal.feedback,
-          plantColors: meal.plantColors || [],
-        });
-        setLoading(false);
-        return;
-      } catch (e) {
-        // Network or AI outage: fall back to the on-device sample analysis.
-      }
-    }
-    analyzeLocally();
+  const pickImage = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+    });
+
+    if (res.canceled) return;
+    processImageUri(res.assets[0].uri);
   };
 
   const loadDemo = (key) => {
-    setImage(null);
-    setUploadedMeal(null);
-    setTransmitted(false);
-    setLoading(false);
-    setAnalysis({ ...DEMO_MEALS[key], source: 'local' });
+    if (SAMPLE_PLATES[key]) {
+      processImageUri(SAMPLE_PLATES[key]);
+      return;
+    }
+    const demo = DEMO_MEALS[key];
+    setAnalysis({
+      source: 'local',
+      mealId: `demo-${key}`,
+      dishName: demo.dishName,
+      healthScore: demo.healthScore,
+      feedback: demo.feedback,
+      plantColors: key === 'salmon' ? ['green', 'orange', 'red'] : ['yellow_white'],
+      detectedIngredients: key === 'salmon' ? ['salmon', 'leafy greens', 'edamame'] : ['ramen noodles', 'egg'],
+      upfTier: key === 'salmon' ? 'unprocessed' : 'ultra_processed',
+      requiresManualTags: false,
+    });
+  };
+
+  const handleUpdateIngredients = (updatedList) => {
+    setAnalysis((prev) => (prev ? { ...prev, detectedIngredients: updatedList } : prev));
+  };
+
+  const handleRecalculate = async () => {
+    if (!analysis || !analysis.mealId) return;
+    setRecalculating(true);
+    try {
+      if (onEditMeal && analysis.source === 'api') {
+        const res = await onEditMeal(analysis.mealId, {
+          meal_name: analysis.dishName,
+          detected_ingredients: analysis.detectedIngredients,
+          plant_colors: analysis.plantColors,
+          upf_tier: analysis.upfTier,
+        });
+        if (res.ok && res.meal) {
+          setUploadedMeal(res.meal);
+          setAnalysis((prev) => ({
+            ...prev,
+            healthScore: res.meal.healthScore,
+            rawScore: res.meal.rawScore,
+            scores: res.meal.scores,
+            feedback: res.meal.feedback,
+            requiresManualTags: false,
+          }));
+        }
+      } else {
+        const count = analysis.detectedIngredients?.length || 0;
+        const newScore = Math.min(100, Math.max(30, 60 + count * 6));
+        setAnalysis((prev) => ({
+          ...prev,
+          healthScore: newScore,
+          requiresManualTags: false,
+          feedback: `Recalculated with ${count} foods recognized on your plate.`,
+        }));
+      }
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   const transmit = () => {
@@ -117,21 +205,20 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
     const meal =
       uploadedMeal ||
       {
-        id: `scan-${Date.now()}`,
-        source: 'local',
+        id: analysis.mealId || `scan-${Date.now()}`,
+        source: analysis.source,
         memberId: 'me',
         authorName: 'You',
         dishName: analysis.dishName,
-        placeholderEmoji: analysis.placeholderEmoji,
+        placeholderEmoji: '🍽️',
         image,
-        localTime: nowClock(),
         postedLabel: 'Just now',
         healthScore: analysis.healthScore,
-        calories: analysis.calories,
-        protein_g: analysis.protein_g,
-        fiber_g: analysis.fiber_g,
-        plants: analysis.plants,
-        novaGroup: analysis.novaGroup,
+        rawScore: analysis.rawScore,
+        scores: analysis.scores,
+        plantColors: analysis.plantColors,
+        detectedIngredients: analysis.detectedIngredients,
+        upfTier: analysis.upfTier,
         feedback: analysis.feedback,
         reactions: { acknowledge: 0, nurture: 0 },
       };
@@ -140,15 +227,29 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
     if (onDone) setTimeout(onDone, 250);
   };
 
-  const hasMacros =
-    analysis &&
-    (analysis.calories != null || analysis.protein_g != null || analysis.fiber_g != null);
+  const upfLabel = UPF_TIER_LABELS[analysis?.upfTier] || String(analysis?.upfTier || '').replace('_', ' ');
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.title}>Share a Meal</Text>
-        <Text style={styles.subtitle}>Snap your plate and send some love home.</Text>
+        <Text style={styles.subtitle}>Snap your plate and send some care home.</Text>
+      </View>
+
+      <View style={styles.prepRow}>
+        {PREP_CONTEXTS.map((ctx) => {
+          const active = prepContext === ctx.key;
+          return (
+            <TouchableOpacity
+              key={ctx.key}
+              style={[styles.prepChip, active && styles.prepChipActive]}
+              onPress={() => setPrepContext(ctx.key)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.prepText, active && styles.prepTextActive]}>{ctx.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.viewfinder}>
@@ -162,24 +263,29 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
         )}
       </View>
 
-      <TouchableOpacity style={styles.snapBtn} onPress={takePhoto} activeOpacity={0.85}>
-        <Text style={styles.snapText}>📷  Snap Today's Plate</Text>
-      </TouchableOpacity>
+      <View style={styles.btnRow}>
+        <TouchableOpacity style={styles.snapBtn} onPress={takePhoto} activeOpacity={0.85}>
+          <Text style={styles.snapText}>📷 Snap Plate</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.galleryBtn} onPress={pickImage} activeOpacity={0.85}>
+          <Text style={styles.galleryText}>🖼️ Choose Photo</Text>
+        </TouchableOpacity>
+      </View>
 
-      <Text style={styles.demoLabel}>or try a sample</Text>
+      <Text style={styles.demoLabel}>or send a live sample plate</Text>
       <View style={styles.demoRow}>
         <TouchableOpacity style={styles.demoTag} onPress={() => loadDemo('salmon')} activeOpacity={0.85}>
-          <Text style={styles.demoTagText}>Salmon Bowl (88)</Text>
+          <Text style={styles.demoTagText}>Live Salmon Bowl 🐟</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.demoTag} onPress={() => loadDemo('ramen')} activeOpacity={0.85}>
-          <Text style={styles.demoTagText}>Late Ramen (44)</Text>
+          <Text style={styles.demoTagText}>Live Ramen 🍜</Text>
         </TouchableOpacity>
       </View>
 
       {loading && (
         <View style={styles.loading}>
           <ActivityIndicator size="small" color={C.matcha} />
-          <Text style={styles.loadingText}>Looking at your meal…</Text>
+          <Text style={styles.loadingText}>Analyzing meal with backend AI…</Text>
         </View>
       )}
 
@@ -195,7 +301,7 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
             <Text style={styles.scoreLabel}>Nourishment Score</Text>
           </View>
 
-          <Text style={styles.note}>{analysis.feedback}</Text>
+          <Text style={styles.note}>"{analysis.feedback}"</Text>
 
           {analysis.plantColors?.length > 0 && (
             <View style={styles.colorRow}>
@@ -210,22 +316,21 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
             </View>
           )}
 
-          {hasMacros && (
-            <View style={styles.statRow}>
-              {analysis.calories != null && <Stat value={`${analysis.calories} kcal`} />}
-              {analysis.protein_g != null && <Stat value={`${analysis.protein_g}g protein`} />}
-              {analysis.fiber_g != null && <Stat value={`${analysis.fiber_g}g fiber`} />}
-              {analysis.plants != null && <Stat value={`${analysis.plants} plants`} />}
+          {!!upfLabel && (
+            <View style={styles.novaTag}>
+              <Text style={styles.novaText}>{upfLabel}</Text>
             </View>
           )}
 
-          {analysis.novaGroup != null && (
-            <View style={styles.novaTag}>
-              <Text style={styles.novaText}>
-                NOVA {analysis.novaGroup} · {NOVA_LABELS[analysis.novaGroup] || 'Unknown'}
-              </Text>
-            </View>
-          )}
+          <IngredientEditor
+            dishName={analysis.dishName}
+            ingredients={analysis.detectedIngredients}
+            requiresManualTags={analysis.requiresManualTags}
+            confidence={analysis.confidence}
+            onUpdateIngredients={handleUpdateIngredients}
+            onRecalculate={handleRecalculate}
+            saving={recalculating}
+          />
 
           <TouchableOpacity
             style={[styles.shareBtn, transmitted && styles.shareBtnDone]}
@@ -247,20 +352,26 @@ export default function ScanView({ live, onUpload, onTransmit, onDone }) {
   );
 }
 
-function Stat({ value }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 40, backgroundColor: C.canvas, gap: 16 },
+  container: { padding: 20, paddingBottom: 40, backgroundColor: C.canvas, gap: 14 },
 
-  header: { marginBottom: 4 },
+  header: { marginBottom: 2 },
   title: { fontFamily: SERIF, fontSize: 28, color: C.text, letterSpacing: 0.2 },
-  subtitle: { fontSize: 14, color: C.muted, marginTop: 6, lineHeight: 20 },
+  subtitle: { fontSize: 14, color: C.muted, marginTop: 4, lineHeight: 20 },
+
+  prepRow: { flexDirection: 'row', gap: 6 },
+  prepChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+  },
+  prepChipActive: { backgroundColor: C.matcha, borderColor: C.matcha },
+  prepText: { fontSize: 11, color: C.muted, fontWeight: '600' },
+  prepTextActive: { color: '#FFFFFF' },
 
   viewfinder: {
     borderRadius: 24,
@@ -275,25 +386,37 @@ const styles = StyleSheet.create({
   viewfinderEmoji: { fontSize: 46 },
   viewfinderText: { fontSize: 13, color: C.muted },
 
+  btnRow: { flexDirection: 'row', gap: 10 },
   snapBtn: {
+    flex: 1,
     backgroundColor: C.matcha,
     borderRadius: 999,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: 'center',
   },
-  snapText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  snapText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  galleryBtn: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  galleryText: { color: C.text, fontSize: 15, fontWeight: '600' },
 
-  demoLabel: { fontSize: 13, color: C.muted, textAlign: 'center' },
+  demoLabel: { fontSize: 12, color: C.muted, textAlign: 'center' },
   demoRow: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
   demoTag: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: C.border,
     backgroundColor: C.card,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  demoTagText: { fontSize: 13, color: C.text, fontWeight: '600' },
+  demoTagText: { fontSize: 12, color: C.text, fontWeight: '600' },
 
   loading: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center', paddingVertical: 12 },
   loadingText: { fontSize: 13, color: C.muted },
@@ -304,15 +427,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     padding: 20,
-    gap: 16,
+    gap: 14,
     marginTop: 4,
   },
   dishName: { fontFamily: SERIF, fontSize: 24, color: C.text, letterSpacing: 0.2 },
 
-  scoreWrap: { alignItems: 'center', gap: 10 },
+  scoreWrap: { alignItems: 'center', gap: 8 },
   scoreCircle: {
-    width: 120,
-    height: 120,
+    width: 110,
+    height: 110,
     borderRadius: 999,
     borderWidth: 3,
     borderColor: C.matcha,
@@ -321,11 +444,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
   },
-  scoreNum: { fontFamily: SERIF, fontSize: 40, color: C.matcha },
+  scoreNum: { fontFamily: SERIF, fontSize: 38, color: C.matcha },
   scoreDen: { fontSize: 14, color: C.matcha, marginLeft: 2, marginBottom: 8 },
-  scoreLabel: { fontSize: 13, color: C.muted, letterSpacing: 0.4 },
+  scoreLabel: { fontSize: 13, color: C.muted },
 
-  note: { fontSize: 14, color: C.muted, lineHeight: 21, textAlign: 'center', fontStyle: 'italic' },
+  note: { fontSize: 13, color: C.muted, lineHeight: 20, textAlign: 'center', fontStyle: 'italic' },
 
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   colorTag: {
@@ -335,37 +458,26 @@ const styles = StyleSheet.create({
     backgroundColor: C.canvas,
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   colorDot: { width: 10, height: 10, borderRadius: 999 },
   colorText: { fontSize: 12, color: C.text, fontWeight: '600', textTransform: 'capitalize' },
-
-  statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: C.canvas,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  statValue: { fontSize: 12, color: C.text, fontWeight: '600' },
 
   novaTag: {
     alignSelf: 'center',
     backgroundColor: C.matchaLight,
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   novaText: { fontSize: 12, color: C.matcha, fontWeight: '600' },
 
   shareBtn: {
     backgroundColor: C.terracotta,
     borderRadius: 999,
-    paddingVertical: 17,
+    paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 6,
   },
   shareBtnDone: { backgroundColor: C.muted },
   shareText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
