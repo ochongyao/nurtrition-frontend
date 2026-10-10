@@ -8,6 +8,7 @@ import ScanView from './components/ScanView';
 import StreamView from './components/StreamView';
 import StandingsView from './components/StandingsView';
 import AuthView from './components/AuthView';
+import StripeCheckoutModal from './components/StripeCheckoutModal';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
@@ -19,10 +20,11 @@ const C = {
   muted: '#756D65',
   matcha: '#4F7059',
   matchaLight: '#E8EFE9',
+  gold: '#B8860B',
+  goldLight: '#FFF8DC',
 };
 
 function AppShell() {
-  // Android is edge-to-edge: offset the root so nothing sits under the status bar.
   const insets = useSafeAreaInsets();
 
   const {
@@ -41,10 +43,13 @@ function AppShell() {
     getMealAudit,
     refresh,
     updateProfile,
+    subscription,
+    setSubscription,
   } = useFamilyCare();
 
   const [activeTab, setActiveTab] = useState('table');
   const [showAuth, setShowAuth] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const goToTable = () => setActiveTab('table');
 
@@ -75,14 +80,27 @@ function AppShell() {
             {mode === 'live' && family ? family.name : 'A warm kitchen table, wherever you are.'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.statusChip}
-          onPress={() => setShowAuth(true)}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.statusDot, mode === 'live' && styles.statusDotLive]} />
-          <Text style={styles.statusText}>{statusLabel}</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.proBadgeChip, subscription?.isSubscriber && styles.proBadgeActive]}
+            onPress={() => setShowCheckout(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.proBadgeText, subscription?.isSubscriber && styles.proBadgeActiveText]}>
+              {subscription?.isSubscriber ? '⭐ Pro' : '🌱 Circle Pass'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.statusChip}
+            onPress={() => setShowAuth(true)}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.statusDot, mode === 'live' && styles.statusDotLive]} />
+            <Text style={styles.statusText}>{statusLabel}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.screen}>
@@ -103,13 +121,14 @@ function AppShell() {
             onDone={goToTable}
           />
         )}
-
         {activeTab === 'rhythm' && (
           <StandingsView
             standings={standings}
             meals={meals}
             weekly={weekly}
             userProfile={userProfile}
+            subscription={subscription}
+            onOpenCheckout={() => setShowCheckout(true)}
             onUpdateProfile={updateProfile}
             onRefresh={() => refresh(true)}
             refreshing={isRefreshing}
@@ -118,9 +137,15 @@ function AppShell() {
       </View>
 
       <NavBar activeTab={activeTab} onChange={setActiveTab} />
+
+      <StripeCheckoutModal
+        visible={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        subscription={subscription}
+        onSubscriptionUpdated={setSubscription}
+      />
     </View>
   );
-
 }
 
 export default function App() {
@@ -135,7 +160,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.canvas },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -145,10 +169,34 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: C.canvas,
   },
-  headerLeft: { flex: 1, paddingRight: 12 },
+  headerLeft: { flex: 1, paddingRight: 8 },
   brand: { fontFamily: SERIF, fontSize: 26, color: C.text, letterSpacing: 0.3 },
   tagline: { fontSize: 13, color: C.muted, marginTop: 3 },
-
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  proBadgeChip: {
+    backgroundColor: C.matchaLight,
+    borderWidth: 1,
+    borderColor: '#C2DBC6',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  proBadgeActive: {
+    backgroundColor: C.goldLight,
+    borderColor: '#E6D78C',
+  },
+  proBadgeText: {
+    fontSize: 12,
+    color: C.matcha,
+    fontWeight: '700',
+  },
+  proBadgeActiveText: {
+    color: '#8B6508',
+  },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,7 +206,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   statusDot: {
     width: 8,
@@ -168,6 +216,5 @@ const styles = StyleSheet.create({
   },
   statusDotLive: { backgroundColor: C.matcha },
   statusText: { fontSize: 12, color: C.text, fontWeight: '700' },
-
   screen: { flex: 1, backgroundColor: C.canvas },
 });

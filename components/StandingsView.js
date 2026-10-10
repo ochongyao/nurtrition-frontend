@@ -41,6 +41,8 @@ export default function StandingsView({
   meals,
   weekly,
   userProfile,
+  subscription,
+  onOpenCheckout,
   onUpdateProfile,
   onRefresh,
   refreshing = false,
@@ -145,6 +147,30 @@ export default function StandingsView({
       <Text style={styles.reminder}>
         Scores are gently balanced for everyone's routine.
       </Text>
+
+      {onOpenCheckout ? (
+        <TouchableOpacity
+          style={[styles.proCard, subscription?.isSubscriber && styles.proCardSubscribed]}
+          onPress={onOpenCheckout}
+          activeOpacity={0.88}
+        >
+          <View style={styles.proCardLeft}>
+            <Text style={[styles.proCardTitle, subscription?.isSubscriber && styles.proCardTitleSubscribed]}>
+              {subscription?.isSubscriber ? '⭐ Nurtrition Circle Pro' : '🌱 Nurtrition Circle Pass'}
+            </Text>
+            <Text style={styles.proCardSub}>
+              {subscription?.isSubscriber
+                ? 'Unlimited vision audits & family rhythm digests active.'
+                : 'Unlock unlimited plate audits, family digests & grocery swaps.'}
+            </Text>
+          </View>
+          <View style={[styles.proCardBtn, subscription?.isSubscriber && styles.proCardBtnSubscribed]}>
+            <Text style={[styles.proCardBtnText, subscription?.isSubscriber && styles.proCardBtnTextSubscribed]}>
+              {subscription?.isSubscriber ? 'Manage' : 'Upgrade'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
 
       <InsightsView
         userProfile={userProfile}
@@ -257,4 +283,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 12,
   },
+
+  proCard: {
+    backgroundColor: C.card,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#C2DBC6',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  proCardSubscribed: {
+    borderColor: '#E6D78C',
+    backgroundColor: '#FFFDF5',
+  },
+  proCardLeft: { flex: 1 },
+  proCardTitle: { fontFamily: SERIF, fontSize: 16, fontWeight: '700', color: C.matcha },
+  proCardTitleSubscribed: { color: '#8B6508' },
+  proCardSub: { fontSize: 12, color: C.muted, marginTop: 3, lineHeight: 17 },
+  proCardBtn: {
+    backgroundColor: C.matcha,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  proCardBtnSubscribed: { backgroundColor: '#8B6508' },
+  proCardBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  proCardBtnTextSubscribed: { color: '#FFFFFF' },
 });
