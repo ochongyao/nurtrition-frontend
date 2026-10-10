@@ -33,15 +33,12 @@ export const uploadMeal = async ({ uri, preparationContext = 'home_cooked', fami
   const formData = new FormData();
   const name = (uri && uri.split('/').pop()) || 'meal_photo.jpg';
 
-  if (Platform.OS === 'web' && uri && (uri.startsWith('blob:') || uri.startsWith('data:'))) {
-    try {
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      formData.append('image', blob, name);
-    } catch {
-      formData.append('image', { uri, name, type: 'image/jpeg' });
-    }
-  } else {
+  try {
+    const fileRes = await fetch(uri);
+    const blob = await fileRes.blob();
+    formData.append('image', blob, name);
+  } catch {
+    // Legacy fallback
     formData.append('image', { uri, name, type: 'image/jpeg' });
   }
 
@@ -49,3 +46,4 @@ export const uploadMeal = async ({ uri, preparationContext = 'home_cooked', fami
   if (familyId) formData.append('family_id', familyId);
   return request('/api/v1/meals/upload', { method: 'POST', body: formData, timeout: 45000 });
 };
+

@@ -99,7 +99,7 @@ export const getMe = () => request('/api/v1/users/me');
 
 // --- Meals -----------------------------------------------------------------
 
-export const uploadMeal = ({
+export const uploadMeal = async ({
   uri,
   fileName = 'meal_photo.jpg',
   mimeType = 'image/jpeg',
@@ -107,7 +107,13 @@ export const uploadMeal = ({
   familyId,
 }) => {
   const form = new FormData();
-  form.append('image', { uri, name: fileName, type: mimeType });
+  try {
+    const fileRes = await fetch(uri);
+    const blob = await fileRes.blob();
+    form.append('image', blob, fileName);
+  } catch {
+    form.append('image', { uri, name: fileName, type: mimeType });
+  }
   form.append('preparation_context', preparationContext);
   if (familyId) form.append('family_id', familyId);
   return request('/api/v1/meals/upload', {
@@ -117,6 +123,7 @@ export const uploadMeal = ({
     timeoutMs: UPLOAD_TIMEOUT_MS,
   });
 };
+
 
 export const getMeal = (mealId) => request(`/api/v1/meals/${mealId}`);
 
