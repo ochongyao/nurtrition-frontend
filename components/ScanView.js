@@ -127,7 +127,7 @@ export default function ScanView({ onUpload, onEditMeal, onTransmit, onDone }) {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Camera required', 'FamBite needs camera access to snap your plate.');
+      Alert.alert('Camera required', 'nurtrition needs camera access to snap your plate.');
       return;
     }
 

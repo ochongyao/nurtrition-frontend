@@ -1,8 +1,8 @@
-# FamBite (working title: healthyfam)
+# nurtrition
 
 ## Product Vision
 
-FamBite is a competitive and emotional family wellness app, not a single-player calorie counter.
+nurtrition is a competitive and emotional family wellness app, not a single-player calorie counter.
 Target: families, especially those living apart (e.g., a student studying abroad + parents back home).
 
 - **Primary love language:** food / "Have you eaten yet?"

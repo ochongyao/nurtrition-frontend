@@ -70,7 +70,7 @@ function AppShell() {
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>FamBite</Text>
+          <Text style={styles.brand}>nurtrition</Text>
           <Text style={styles.tagline}>
             {mode === 'live' && family ? family.name : 'A warm kitchen table, wherever you are.'}
           </Text>
