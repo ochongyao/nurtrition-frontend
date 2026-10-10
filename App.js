@@ -35,6 +35,7 @@ function AppShell() {
     meals,
     standings,
     weekly,
+    isWeeklyLoading,
     userProfile,
     transmit,
     react,
@@ -126,6 +127,8 @@ function AppShell() {
             standings={standings}
             meals={meals}
             weekly={weekly}
+            isWeeklyLoading={isWeeklyLoading}
+            mode={mode}
             userProfile={userProfile}
             subscription={subscription}
             onOpenCheckout={() => setShowCheckout(true)}

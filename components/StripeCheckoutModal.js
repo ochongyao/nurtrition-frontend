@@ -177,6 +177,7 @@ export default function StripeCheckoutModal({
                 });
               }
               Alert.alert('Plan Updated', 'Your membership has been reverted to the free plan.');
+              onClose();
             } catch (err) {
               Alert.alert('Error', err.detail || err.message || 'Could not cancel subscription.');
             } finally {
@@ -285,24 +286,8 @@ export default function StripeCheckoutModal({
                     <Text style={styles.planName}>Monthly</Text>
                     <View style={[styles.radioDot, selectedPlan === 'monthly' && styles.radioDotActive]} />
                   </View>
-                  <Text style={styles.planPrice}>$6.99</Text>
+                  <Text style={styles.planPrice}>$10.00</Text>
                   <Text style={styles.planCadence}>per month</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.planCard, selectedPlan === 'annual' && styles.planCardActive]}
-                  onPress={() => setSelectedPlan('annual')}
-                  activeOpacity={0.88}
-                >
-                  <View style={styles.planSavingsTag}>
-                    <Text style={styles.planSavingsText}>SAVE 30%</Text>
-                  </View>
-                  <View style={styles.planCardHeader}>
-                    <Text style={styles.planName}>Annual</Text>
-                    <View style={[styles.radioDot, selectedPlan === 'annual' && styles.radioDotActive]} />
-                  </View>
-                  <Text style={styles.planPrice}>$59.00</Text>
-                  <Text style={styles.planCadence}>$4.91 / mo yearly</Text>
                 </TouchableOpacity>
               </View>
 
@@ -328,7 +313,7 @@ export default function StripeCheckoutModal({
                   <>
                     <Ionicons name="lock-closed" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
                     <Text style={styles.stripePayBtnText}>
-                      Checkout with Stripe ({selectedPlan === 'annual' ? '$59/yr' : '$6.99/mo'})
+                      Checkout with Stripe ($10.00/mo)
                     </Text>
                   </>
                 )}

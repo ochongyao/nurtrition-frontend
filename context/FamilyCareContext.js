@@ -44,6 +44,7 @@ export function FamilyCareProvider({ children }) {
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
   const [meals, setMeals] = useState([]);
   const [weekly, setWeekly] = useState(null);
+  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [subscription, setSubscription] = useState({
     isSubscriber: false,
@@ -70,15 +71,25 @@ export function FamilyCareProvider({ children }) {
     return null;
   }, []);
 
+  const updateSubscriptionState = useCallback(async (next) => {
+    setSubscription(next);
+    await setStoredSubscription(next);
+  }, []);
+
   const loadFamilyData = useCallback(async (familyId, currentUserName, forceWeekly = false) => {
-    const [feed, digest] = await Promise.all([
-      api.getFamilyFeed(familyId, { limit: 50 }).catch(() => null),
-      api.getWeeklyDigest(familyId, forceWeekly).catch(() => null),
-    ]);
-    if (Array.isArray(feed)) {
-      setMeals(feed.map((item) => feedItemToMeal(item, { currentUserName })));
+    setIsWeeklyLoading(true);
+    try {
+      const [feed, digest] = await Promise.all([
+        api.getFamilyFeed(familyId, { limit: 50 }).catch(() => null),
+        api.getWeeklyDigest(familyId, forceWeekly).catch(() => null),
+      ]);
+      if (Array.isArray(feed)) {
+        setMeals(feed.map((item) => feedItemToMeal(item, { currentUserName })));
+      }
+      if (digest) setWeekly(digest);
+    } finally {
+      setIsWeeklyLoading(false);
     }
-    if (digest) setWeekly(digest);
   }, []);
 
   // 1. Initialize session on app start from backend API
@@ -177,8 +188,12 @@ export function FamilyCareProvider({ children }) {
 
   const liveStandings = useMemo(() => (weekly ? weeklyToRows(weekly) : []), [weekly]);
 
-  const standings =
-    mode === 'live' && liveStandings.length ? liveStandings : offlineStandings;
+  const standings = useMemo(() => {
+    if (mode === 'live') {
+      return liveStandings;
+    }
+    return offlineStandings;
+  }, [mode, liveStandings, offlineStandings]);
 
   const applySession = useCallback(
     async (session) => {
@@ -249,6 +264,7 @@ export function FamilyCareProvider({ children }) {
     setUser(null);
     setFamily(null);
     setWeekly(null);
+    setIsWeeklyLoading(false);
     setMeals(seedMeals);
     setUserProfile(defaultUserProfile);
     setSubscription({
@@ -399,6 +415,7 @@ export function FamilyCareProvider({ children }) {
     meals,
     standings,
     weekly,
+    isWeeklyLoading,
     isReady,
     signIn,
     signUp,
@@ -414,7 +431,7 @@ export function FamilyCareProvider({ children }) {
     updateProfile,
     subscription,
     refreshSubscription,
-    setSubscription,
+    setSubscription: updateSubscriptionState,
     setMode,
   };
 

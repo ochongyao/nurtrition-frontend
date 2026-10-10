@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { ACTIVITY_LEVELS, SEX_OPTIONS, buildWeeklyAudit } from '../data/mockFamily';
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
@@ -16,7 +16,14 @@ const C = {
   terracottaLight: '#F6E5DE',
 };
 
-export default function InsightsView({ userProfile, onUpdateProfile, meals, weekly }) {
+export default function InsightsView({
+  userProfile,
+  onUpdateProfile,
+  meals,
+  weekly,
+  isWeeklyLoading = false,
+  mode = 'live',
+}) {
   const [ageText, setAgeText] = useState(String(userProfile.age));
   const [heightText, setHeightText] = useState(String(userProfile.heightCm));
   const [weightText, setWeightText] = useState(String(userProfile.weightKg));
@@ -126,7 +133,12 @@ export default function InsightsView({ userProfile, onUpdateProfile, meals, week
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Little Notes</Text>
-        {weekly?.ai_family_narrative ? (
+        {isWeeklyLoading && !weekly ? (
+          <View style={styles.loadingNotesCard}>
+            <ActivityIndicator size="small" color={C.matcha} style={{ marginBottom: 8 }} />
+            <Text style={styles.loadingNotesText}>Gathering weekly reflections... 🌱</Text>
+          </View>
+        ) : weekly?.ai_family_narrative ? (
           <>
             <View style={styles.noteRow}>
               <Text style={styles.noteEmoji}>🌿</Text>
@@ -145,6 +157,13 @@ export default function InsightsView({ userProfile, onUpdateProfile, meals, week
               </View>
             )}
           </>
+        ) : mode === 'live' ? (
+          <View style={styles.emptyNotesCard}>
+            <Text style={styles.emptyNotesEmoji}>🍲</Text>
+            <Text style={styles.emptyNotesText}>
+              Share meals at your table to begin receiving AI family digests and grocery notes.
+            </Text>
+          </View>
         ) : (
           audit.points.map((point) => (
             <View key={point.title} style={styles.noteRow}>
@@ -243,6 +262,12 @@ const styles = StyleSheet.create({
   noteText: { flex: 1 },
   noteTitle: { fontSize: 14, color: C.text, fontWeight: '700' },
   noteDetail: { fontSize: 13, color: C.muted, lineHeight: 19, marginTop: 3 },
+
+  loadingNotesCard: { alignItems: 'center', paddingVertical: 18, gap: 4 },
+  loadingNotesText: { fontSize: 13, color: C.matcha, fontWeight: '600' },
+  emptyNotesCard: { alignItems: 'center', paddingVertical: 16, gap: 6 },
+  emptyNotesEmoji: { fontSize: 26 },
+  emptyNotesText: { fontSize: 12.5, color: C.muted, textAlign: 'center', lineHeight: 18, paddingHorizontal: 12 },
 
   footnote: { textAlign: 'center', fontSize: 12, color: C.muted, paddingVertical: 4 },
 });

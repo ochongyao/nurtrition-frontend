@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Platform } from 'react-native';
 import { WEEKLY_QUOTA } from '../data/mockFamily';
 import InsightsView from './InsightsView';
 
@@ -40,6 +40,8 @@ export default function StandingsView({
   standings,
   meals,
   weekly,
+  isWeeklyLoading = false,
+  mode = 'live',
   userProfile,
   subscription,
   onOpenCheckout,
@@ -82,67 +84,89 @@ export default function StandingsView({
         <Text style={styles.subtitle}>How everyone has been eating, side by side.</Text>
       </View>
 
-      <View style={styles.gardenCard}>
-        <Text style={styles.gardenLabel}>Family Harmony</Text>
-        <Text style={styles.gardenValue}>{harmony}%</Text>
-        <Text style={styles.gardenText}>
-          of meals this week were wholesome & home-cooked 🌱
-        </Text>
-        <View style={styles.gaugeTrack}>
-          <View style={[styles.gaugeFill, { width: `${Math.min(100, harmony)}%` }]} />
-        </View>
-        <View style={styles.statsRow}>
-          <Text style={styles.gardenFootnote}>
-            🌿 {collectivePlants} botanical plant colors reached
-          </Text>
-          <Text style={styles.gardenFootnote}>
-            🍲 {totalMeals} plates shared
+      {isWeeklyLoading && !weekly ? (
+        <View style={styles.loadingWeeklyCard}>
+          <ActivityIndicator size="small" color={C.matcha} style={{ marginBottom: 6 }} />
+          <Text style={styles.loadingWeeklyTitle}>Gathering Family Weekly Insights...</Text>
+          <Text style={styles.loadingWeeklySub}>
+            Calculating collective plant diversity and preparing your weekly table digest.
           </Text>
         </View>
-      </View>
-
-      {!!weekly?.ai_family_narrative && (
-        <View style={styles.narrativeCard}>
-          <Text style={styles.narrativeTitle}>This Week's Table Story</Text>
-          <Text style={styles.narrativeBody}>"{weekly.ai_family_narrative}"</Text>
-        </View>
-      )}
-
-      {!!weekly?.recommended_grocery_swap && (
-        <View style={styles.swapCard}>
-          <Text style={styles.swapTitle}>🥕 Gentle Grocery Swap</Text>
-          <Text style={styles.swapBody}>{weekly.recommended_grocery_swap}</Text>
-        </View>
-      )}
-
-      <View style={styles.memberList}>
-        {rows.map((row) => {
-          const person = DISPLAY[row.id];
-          const name = row.name || person?.name || 'Family';
-          const initial = name.charAt(0).toUpperCase();
-          return (
-            <View key={row.id} style={styles.memberCard}>
-              <View style={styles.avatar}>
-                {person?.emoji ? (
-                  <Text style={styles.avatarEmoji}>{person.emoji}</Text>
-                ) : (
-                  <Text style={styles.avatarInitial}>{initial}</Text>
-                )}
-              </View>
-              <View style={styles.memberText}>
-                <Text style={styles.memberName}>{name}</Text>
-                <Text style={styles.memberStreak}>
-                  {row.mealsLogged} meals shared · {row.greens || 0} plant variety
-                </Text>
-                {!!row.highlight && <Text style={styles.memberHighlight}>Top: {row.highlight}</Text>}
-              </View>
-              <View style={styles.indexTag}>
-                <Text style={styles.indexValue}>{Math.round(row.index || 0)}</Text>
-              </View>
+      ) : (
+        <>
+          <View style={styles.gardenCard}>
+            <Text style={styles.gardenLabel}>Family Harmony</Text>
+            <Text style={styles.gardenValue}>{harmony}%</Text>
+            <Text style={styles.gardenText}>
+              of meals this week were wholesome & home-cooked 🌱
+            </Text>
+            <View style={styles.gaugeTrack}>
+              <View style={[styles.gaugeFill, { width: `${Math.min(100, harmony)}%` }]} />
             </View>
-          );
-        })}
-      </View>
+            <View style={styles.statsRow}>
+              <Text style={styles.gardenFootnote}>
+                🌿 {collectivePlants} botanical plant colors reached
+              </Text>
+              <Text style={styles.gardenFootnote}>
+                🍲 {totalMeals} plates shared
+              </Text>
+            </View>
+          </View>
+
+          {!!weekly?.ai_family_narrative && (
+            <View style={styles.narrativeCard}>
+              <Text style={styles.narrativeTitle}>This Week's Table Story</Text>
+              <Text style={styles.narrativeBody}>"{weekly.ai_family_narrative}"</Text>
+            </View>
+          )}
+
+          {!!weekly?.recommended_grocery_swap && (
+            <View style={styles.swapCard}>
+              <Text style={styles.swapTitle}>🥕 Gentle Grocery Swap</Text>
+              <Text style={styles.swapBody}>{weekly.recommended_grocery_swap}</Text>
+            </View>
+          )}
+
+          {rows.length > 0 ? (
+            <View style={styles.memberList}>
+              {rows.map((row) => {
+                const person = DISPLAY[row.id];
+                const name = row.name || person?.name || 'Family';
+                const initial = name.charAt(0).toUpperCase();
+                return (
+                  <View key={row.id} style={styles.memberCard}>
+                    <View style={styles.avatar}>
+                      {person?.emoji ? (
+                        <Text style={styles.avatarEmoji}>{person.emoji}</Text>
+                      ) : (
+                        <Text style={styles.avatarInitial}>{initial}</Text>
+                      )}
+                    </View>
+                    <View style={styles.memberText}>
+                      <Text style={styles.memberName}>{name}</Text>
+                      <Text style={styles.memberStreak}>
+                        {row.mealsLogged} meals shared · {row.greens || 0} plant variety
+                      </Text>
+                      {!!row.highlight && <Text style={styles.memberHighlight}>Top: {row.highlight}</Text>}
+                    </View>
+                    <View style={styles.indexTag}>
+                      <Text style={styles.indexValue}>{Math.round(row.index || 0)}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : mode === 'live' ? (
+            <View style={styles.emptyMembersCard}>
+              <Text style={styles.emptyMembersEmoji}>🌱</Text>
+              <Text style={styles.emptyMembersTitle}>Your Family Circle Table</Text>
+              <Text style={styles.emptyMembersSub}>
+                Share a plate together in the Share tab to begin charting your communal nourishment.
+              </Text>
+            </View>
+          ) : null}
+        </>
+      )}
 
       <Text style={styles.reminder}>
         Scores are gently balanced for everyone's routine.
@@ -177,6 +201,8 @@ export default function StandingsView({
         onUpdateProfile={onUpdateProfile}
         meals={meals}
         weekly={weekly}
+        isWeeklyLoading={isWeeklyLoading}
+        mode={mode}
       />
     </ScrollView>
   );
@@ -312,4 +338,29 @@ const styles = StyleSheet.create({
   proCardBtnSubscribed: { backgroundColor: '#8B6508' },
   proCardBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   proCardBtnTextSubscribed: { color: '#FFFFFF' },
+
+  loadingWeeklyCard: {
+    backgroundColor: C.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 26,
+    alignItems: 'center',
+    gap: 6,
+  },
+  loadingWeeklyTitle: { fontFamily: SERIF, fontSize: 17, color: C.text, fontWeight: '600', textAlign: 'center' },
+  loadingWeeklySub: { fontSize: 12.5, color: C.muted, lineHeight: 18, textAlign: 'center', paddingHorizontal: 12 },
+
+  emptyMembersCard: {
+    backgroundColor: C.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 22,
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyMembersEmoji: { fontSize: 28, marginBottom: 2 },
+  emptyMembersTitle: { fontFamily: SERIF, fontSize: 16, color: C.text, fontWeight: '700' },
+  emptyMembersSub: { fontSize: 12.5, color: C.muted, textAlign: 'center', lineHeight: 18, paddingHorizontal: 12 },
 });
