@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { WEEKLY_QUOTA } from '../data/mockFamily';
 import InsightsView from './InsightsView';
 
