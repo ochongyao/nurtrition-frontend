@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { AppState } from 'react-native';
 import * as api from '../api/endpoints';
 import { setAuthToken } from '../api/client';
 import {
@@ -18,6 +19,8 @@ import {
   setStoredFamily,
   getStoredProfile,
   setStoredProfile,
+  getStoredSubscription,
+  setStoredSubscription,
   clearStoredSession,
 } from '../api/storage';
 import {
@@ -52,15 +55,19 @@ export function FamilyCareProvider({ children }) {
     try {
       const res = await api.getSubscriptionStatus();
       if (res) {
-        setSubscription({
+        const subData = {
           isSubscriber: !!res.is_subscriber,
           tier: res.tier || 'Family Explorer (Free)',
           expiresAt: res.expires_at || null,
-        });
+        };
+        setSubscription(subData);
+        await setStoredSubscription(subData);
+        return subData;
       }
     } catch {
       // Keep existing state
     }
+    return null;
   }, []);
 
   const loadFamilyData = useCallback(async (familyId, currentUserName, forceWeekly = false) => {
@@ -79,17 +86,22 @@ export function FamilyCareProvider({ children }) {
     let mounted = true;
     async function initSession() {
       try {
-        const [savedToken, savedUser, savedFamily, savedProfile] = await Promise.all([
+        const [savedToken, savedUser, savedFamily, savedProfile, savedSub] = await Promise.all([
           getStoredToken(),
           getStoredUser(),
           getStoredFamily(),
           getStoredProfile(),
+          getStoredSubscription(),
         ]);
 
         if (!mounted) return;
 
         if (savedProfile) {
           setUserProfile(savedProfile);
+        }
+
+        if (savedSub) {
+          setSubscription(savedSub);
         }
 
         if (savedToken) {
@@ -108,6 +120,7 @@ export function FamilyCareProvider({ children }) {
             setFamily(activeFamily);
             await loadFamilyData(merged.family_id, merged.full_name);
           }
+          await refreshSubscription();
         } catch (err) {
           if (err?.status === 401 && savedToken) {
             await clearStoredSession();
@@ -131,7 +144,20 @@ export function FamilyCareProvider({ children }) {
     return () => {
       mounted = false;
     };
-  }, [loadFamilyData]);
+  }, [loadFamilyData, refreshSubscription]);
+
+  // Auto-refresh subscription whenever the app returns to the foreground
+  useEffect(() => {
+    refreshSubscription();
+    const appStateSub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        refreshSubscription();
+      }
+    });
+    return () => {
+      appStateSub.remove();
+    };
+  }, [refreshSubscription]);
 
   const offlineStandings = useMemo(() => {
     const resolved = familyMembers.map((member) =>
@@ -176,8 +202,9 @@ export function FamilyCareProvider({ children }) {
       } else {
         setFamily(null);
       }
+      await refreshSubscription();
     },
-    [loadFamilyData]
+    [loadFamilyData, refreshSubscription]
   );
 
   const signIn = useCallback(
@@ -224,6 +251,11 @@ export function FamilyCareProvider({ children }) {
     setWeekly(null);
     setMeals(seedMeals);
     setUserProfile(defaultUserProfile);
+    setSubscription({
+      isSubscriber: false,
+      tier: 'Family Explorer (Free)',
+      expiresAt: null,
+    });
     setMode('offline');
     setStatus('idle');
     setError(null);
@@ -262,6 +294,7 @@ export function FamilyCareProvider({ children }) {
   const refresh = useCallback(
     async (forceWeekly = false) => {
       setStatus('loading');
+      await refreshSubscription();
       if (family) {
         await loadFamilyData(family.id, user?.full_name, forceWeekly);
       } else {
@@ -272,7 +305,7 @@ export function FamilyCareProvider({ children }) {
       }
       setStatus('idle');
     },
-    [family, user, loadFamilyData]
+    [family, user, loadFamilyData, refreshSubscription]
   );
 
   const uploadMealPhoto = useCallback(

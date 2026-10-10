@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  AppState,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,11 +52,62 @@ export default function StripeCheckoutModal({
   const [loading, setLoading] = useState(false);
   const [testPaying, setTestPaying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [successNotice, setSuccessNotice] = useState(false);
 
+  const checkStatus = async (showFeedback = false) => {
+    if (showFeedback) setChecking(true);
+    try {
+      const res = await api.getSubscriptionStatus();
+      if (res && res.is_subscriber) {
+        setSuccessNotice(true);
+        if (onSubscriptionUpdated) {
+          onSubscriptionUpdated({
+            isSubscriber: true,
+            tier: res.tier || 'Nurtrition Circle Pro',
+            expiresAt: res.expires_at,
+          });
+        }
+        return true;
+      } else if (showFeedback) {
+        Alert.alert(
+          'Checking Payment',
+          'Payment not detected yet. If you just paid on Stripe, please wait a few seconds and tap verify again.'
+        );
+      }
+    } catch {
+      if (showFeedback) {
+        Alert.alert('Notice', 'Unable to reach the server to verify status right now.');
+      }
+    } finally {
+      if (showFeedback) setChecking(false);
+    }
+    return false;
+  };
+
   useEffect(() => {
-    if (visible) setSuccessNotice(false);
-  }, [visible]);
+    if (!visible) return;
+    setSuccessNotice(false);
+    checkStatus(false);
+
+    const appSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus(false);
+      }
+    });
+
+    let pollInterval = null;
+    if (!subscription?.isSubscriber) {
+      pollInterval = setInterval(() => {
+        checkStatus(false);
+      }, 3500);
+    }
+
+    return () => {
+      appSub.remove();
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [visible, subscription?.isSubscriber]);
 
   const handleStripeCheckout = async () => {
     setLoading(true);
@@ -282,6 +334,22 @@ export default function StripeCheckoutModal({
                 )}
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.verifyBtn}
+                onPress={() => checkStatus(true)}
+                disabled={checking}
+                activeOpacity={0.85}
+              >
+                {checking ? (
+                  <ActivityIndicator color={C.matcha} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="sync-outline" size={15} color={C.matcha} style={{ marginRight: 6 }} />
+                    <Text style={styles.verifyBtnText}>Already paid on Stripe? Check status</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
               <View style={styles.directCardBox}>
                 <View style={styles.cardPreviewRow}>
                   <Text style={styles.cardPreviewNum}>4242 •••• •••• 4242</Text>
@@ -315,41 +383,24 @@ export default function StripeCheckoutModal({
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, backgroundColor: C.canvas },
   headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.card,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card,
   },
   closeBtn: { padding: 6, borderRadius: 20, backgroundColor: C.canvas },
   headerTitle: { fontFamily: SERIF, fontSize: 17, fontWeight: '600', color: C.text },
   scrollContent: { padding: 20, paddingBottom: 40 },
   memberView: { gap: 16 },
   activeHeroBox: {
-    backgroundColor: C.goldLight,
-    borderWidth: 1.5,
-    borderColor: C.goldBorder,
-    borderRadius: 20,
-    padding: 22,
-    alignItems: 'center',
+    backgroundColor: C.goldLight, borderWidth: 1.5, borderColor: C.goldBorder,
+    borderRadius: 20, padding: 22, alignItems: 'center',
   },
   activeHeroEmoji: { fontSize: 40, marginBottom: 8 },
   activeHeroTitle: { fontFamily: SERIF, fontSize: 22, fontWeight: '700', color: C.gold, marginBottom: 8 },
   statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: C.goldBorder,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF',
+    borderWidth: 1, borderColor: C.goldBorder, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 5, marginBottom: 10,
   },
   statusPillDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#2E7D32' },
   statusPillText: { fontSize: 12, fontWeight: '700', color: '#2E7D32' },
@@ -359,42 +410,24 @@ const styles = StyleSheet.create({
   cancelLinkText: { fontSize: 12.5, color: C.terracotta, fontWeight: '600' },
   heroSection: { alignItems: 'center', marginBottom: 20 },
   pillBadge: {
-    backgroundColor: C.matchaLight,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 14,
-    marginBottom: 8,
+    backgroundColor: C.matchaLight, paddingHorizontal: 12, paddingVertical: 4,
+    borderRadius: 14, marginBottom: 8,
   },
   pillBadgeText: { fontSize: 12, fontWeight: '700', color: C.matcha },
   heroHeadline: {
-    fontFamily: SERIF,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '700',
-    color: C.text,
-    textAlign: 'center',
-    marginBottom: 6,
+    fontFamily: SERIF, fontSize: 22, lineHeight: 28, fontWeight: '700',
+    color: C.text, textAlign: 'center', marginBottom: 6,
   },
   heroSub: { fontSize: 13, lineHeight: 19, color: C.muted, textAlign: 'center' },
   planSwitchContainer: { flexDirection: 'row', gap: 12, marginBottom: 18 },
   planCard: {
-    flex: 1,
-    backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: C.border,
-    position: 'relative',
+    flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 14,
+    borderWidth: 2, borderColor: C.border, position: 'relative',
   },
   planCardActive: { borderColor: C.matcha, backgroundColor: '#FAFCFA' },
   planSavingsTag: {
-    position: 'absolute',
-    top: -9,
-    right: 10,
-    backgroundColor: C.terracotta,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
+    position: 'absolute', top: -9, right: 10, backgroundColor: C.terracotta,
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
   },
   planSavingsText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   planCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -404,69 +437,46 @@ const styles = StyleSheet.create({
   planPrice: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: C.text },
   planCadence: { fontSize: 11, color: C.muted, marginTop: 2 },
   benefitsCard: {
-    backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    marginBottom: 18,
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, marginBottom: 18,
   },
   benefitsTitle: { fontFamily: SERIF, fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 10 },
   benefitRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   benefitText: { fontSize: 12.5, color: C.text, flex: 1 },
   stripePayBtn: {
-    backgroundColor: C.stripeBlue,
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+    backgroundColor: C.stripeBlue, borderRadius: 12, paddingVertical: 14,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 10,
   },
   stripePayBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  verifyBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 11, backgroundColor: C.card, borderRadius: 12,
+    borderWidth: 1, borderColor: '#C2DBC6', marginBottom: 14,
+  },
+  verifyBtnText: { fontSize: 13, fontWeight: '600', color: C.matcha },
   directCardBox: {
-    backgroundColor: C.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 12,
-    marginBottom: 14,
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    padding: 12, marginBottom: 14,
   },
   cardPreviewRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: C.canvas,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between', backgroundColor: C.canvas,
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 8,
   },
   cardPreviewNum: {
     fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }),
-    fontSize: 12.5,
-    color: C.text,
-    letterSpacing: 1,
+    fontSize: 12.5, color: C.text, letterSpacing: 1,
   },
   cardPreviewExp: { fontSize: 11.5, color: C.muted },
   instantPayBtn: {
-    backgroundColor: C.matchaLight,
-    borderWidth: 1,
-    borderColor: '#C2DBC6',
-    borderRadius: 8,
-    paddingVertical: 9,
-    alignItems: 'center',
+    backgroundColor: C.matchaLight, borderWidth: 1, borderColor: '#C2DBC6',
+    borderRadius: 8, paddingVertical: 9, alignItems: 'center',
   },
   instantPayBtnText: { fontSize: 12.5, fontWeight: '700', color: C.matcha },
   btnDisabled: { opacity: 0.6 },
   disclaimerText: { fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 16, paddingHorizontal: 16 },
   celebrationCard: {
-    backgroundColor: C.card,
-    borderRadius: 18,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: C.border,
-    marginTop: 20,
+    backgroundColor: C.card, borderRadius: 18, padding: 24, alignItems: 'center',
+    borderWidth: 1, borderColor: C.border, marginTop: 20,
   },
   celebrationEmoji: { fontSize: 44, marginBottom: 10 },
   celebrationTitle: { fontFamily: SERIF, fontSize: 20, fontWeight: '700', color: C.text, marginBottom: 6 },

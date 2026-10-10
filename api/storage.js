@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   USER: '@fambite_user_v1',
   FAMILY: '@fambite_family_v1',
   PROFILE: '@fambite_profile_v1',
+  SUBSCRIPTION: '@fambite_subscription_v1',
 };
 
 // In-memory fallback in case AsyncStorage encounters an error on certain platforms
@@ -56,10 +57,16 @@ export const removeStoredFamily = () => removeItem(STORAGE_KEYS.FAMILY);
 export const getStoredProfile = () => getItem(STORAGE_KEYS.PROFILE);
 export const setStoredProfile = (profile) => setItem(STORAGE_KEYS.PROFILE, profile);
 
+export const getStoredSubscription = () => getItem(STORAGE_KEYS.SUBSCRIPTION);
+export const setStoredSubscription = (sub) => setItem(STORAGE_KEYS.SUBSCRIPTION, sub);
+export const removeStoredSubscription = () => removeItem(STORAGE_KEYS.SUBSCRIPTION);
+
 export async function clearStoredSession() {
   await Promise.all([
     removeStoredToken(),
     removeStoredUser(),
     removeStoredFamily(),
+    removeStoredSubscription(),
   ]);
 }
+
